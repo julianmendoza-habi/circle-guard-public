@@ -38,6 +38,7 @@ Declarative pipeline definitions live alongside the code:
 
 - **JDK 21** y **`./gradlew`** ejecutable (Linux agent típico).
 - **Docker** (para los stages que construyen imágenes).
+- **Socket Docker en el contenedor Jenkins:** el [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml) monta `/var/run/docker.sock` para que **Testcontainers** funcione en el stage *Integration Tests* (`-Pintegration`). Si el usuario `jenkins` no puede usar el socket (Linux), añade `group_add` con el GID del grupo `docker` del host. Sin Docker disponible para Testcontainers, define en el job **Environment** `SKIP_INTEGRATION_TESTS=true`: en **master** se omite el stage *Integration Tests*; en **stage** el mismo bloque de Gradle ejecuta tests sin `-Pintegration`.
 - **`kubectl`** con contexto apuntando a tu cluster (Minikube, Kind, EKS, etc.).
 - Plugins recomendados: **Pipeline**, **Git**, **JUnit**, **Credentials Binding**, **Pipeline: Stage View** o **Blue Ocean** (opcional).
 

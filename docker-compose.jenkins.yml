@@ -20,8 +20,10 @@ services:
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
-      # Descomenta en Linux o si Docker Desktop expone el socket al contenedor:
-      # - /var/run/docker.sock:/var/run/docker.sock
+      # Testcontainers (-Pintegration) necesita el daemon Docker del host.
+      # Linux / Docker Desktop (WSL2): monta el socket. Si hay "permission denied",
+      # añade group_add con el GID del grupo docker del host (ver README en ci/).
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       TZ: UTC
       # Evita wizard de plugins en algunos entornos (opcional):

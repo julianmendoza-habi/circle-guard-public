@@ -15,7 +15,13 @@ pipeline {
         }
         stage('Gradle Tests (with integration)') {
             steps {
-                sh './gradlew test --no-daemon -Pintegration'
+                script {
+                    if (env.SKIP_INTEGRATION_TESTS == 'true') {
+                        sh './gradlew test --no-daemon'
+                    } else {
+                        sh './gradlew test --no-daemon -Pintegration'
+                    }
+                }
             }
             post {
                 always {
