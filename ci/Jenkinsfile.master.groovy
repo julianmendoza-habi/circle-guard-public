@@ -7,15 +7,34 @@
  * The Kubernetes deploy stage runs only when `kubectl` is available and `kubectl get --raw=/version`
  * succeeds (real API server). Wrong kubeconfig (e.g. HTML login instead of OpenAPI) skips the stage.
  * To force-skip, set SKIP_K8S_DEPLOY=true as a job env var.
+ *
+ * Docker Hub: master expects images `${IMAGE_NAMESPACE}/*:prod-latest` (default namespace `demitard`).
+ * Jenkins credential `dockerhub-credentials` (Kind: Username with password): usuario Docker Hub + contraseña o Access Token.
+ * Override ID with parameter DOCKERHUB_CREDENTIALS_ID if needed.
  */
 pipeline {
     agent any
     parameters {
         string(name: 'RELEASE_VERSION', defaultValue: '1.0.0', description: 'Semantic version for release notes')
+        string(
+            name: 'IMAGE_NAMESPACE',
+            defaultValue: 'demitard',
+            description: 'Docker Hub usuario/organización (ej. demitard); debe coincidir con deploy/k8s/apps/master/microservices.yaml',
+        )
+        string(
+            name: 'DOCKERHUB_CREDENTIALS_ID',
+            defaultValue: 'dockerhub-credentials',
+            description: 'ID de credencial Jenkins (Username with password) para docker login + push',
+        )
         booleanParam(
             name: 'RUN_INTEGRATION_TESTS',
             defaultValue: false,
             description: 'Run Gradle -Pintegration (Testcontainers; requires Docker usable from the agent)',
+        )
+        booleanParam(
+            name: 'SKIP_DOCKER_BUILD',
+            defaultValue: false,
+            description: 'Saltar build/push de imágenes prod-latest (solo si ya están en el registry)',
         )
         booleanParam(
             name: 'SKIP_K8S_DEPLOY',
@@ -58,6 +77,50 @@ pipeline {
                 }
             }
         }
+        stage('Docker Build & Push (prod-latest)') {
+            when {
+                expression {
+                    if (params.SKIP_DOCKER_BUILD == true || env.SKIP_DOCKER_BUILD == 'true') {
+                        echo 'Stage saltado por SKIP_DOCKER_BUILD=true.'
+                        return false
+                    }
+                    def hasDocker = sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0
+                    if (!hasDocker) {
+                        echo '[WARN] `docker` CLI no disponible. Stage omitido. Usa Dockerfile.jenkins o socket Docker.'
+                    }
+                    return hasDocker
+                }
+            }
+            steps {
+                script {
+                    def ns = params.IMAGE_NAMESPACE?.trim() ?: 'demitard'
+                    def credId = params.DOCKERHUB_CREDENTIALS_ID?.trim() ?: 'dockerhub-credentials'
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: credId,
+                            usernameVariable: 'DOCKERHUB_USERNAME',
+                            passwordVariable: 'DOCKERHUB_PASSWORD',
+                        ),
+                    ]) {
+                        withEnv(["DOCKER_NS=${ns}"]) {
+                            sh '''
+                                set -eu
+                                NS="${DOCKER_NS}"
+                                echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+                                for svcDir in circleguard-auth-service circleguard-identity-service circleguard-form-service circleguard-promotion-service circleguard-notification-service circleguard-gateway-service
+                                do
+                                    SHORT="${svcDir#circleguard-}"
+                                    echo "[INFO] docker build + push ${NS}/${SHORT}:prod-latest"
+                                    docker build -f docker/Dockerfile.service --build-arg "SERVICE_DIR=${svcDir}" -t "${NS}/${SHORT}:prod-latest" .
+                                    docker push "${NS}/${SHORT}:prod-latest"
+                                done
+                            '''
+                        }
+                    }
+                }
+                echo "[INFO] Imágenes publicadas como ${params.IMAGE_NAMESPACE ?: 'demitard'}/*:prod-latest en Docker Hub."
+            }
+        }
         stage('Deploy Kubernetes (master)') {
             when {
                 expression {
@@ -82,7 +145,7 @@ pipeline {
                 }
             }
             steps {
-                echo '[INFO] Manifests use circleguard/*:prod-latest — ensure those tags exist in a registry this cluster can pull.'
+                echo "[INFO] Manifests use ${params.IMAGE_NAMESPACE ?: 'demitard'}/*:prod-latest — build/push stage debe haber publicado esos tags (o SKIP_DOCKER_BUILD si ya existen)."
                 sh 'kubectl apply -f deploy/k8s/apps/master/microservices.yaml'
                 sh '''
                     set -eu

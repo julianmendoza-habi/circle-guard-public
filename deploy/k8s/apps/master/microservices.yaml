@@ -1,6 +1,6 @@
 # Deploy selected CircleGuard microservices into circleguard-master.
 # Prerequisites: namespaces + infra (postgres-redis-neo4j, kafka-zookeeper, openldap).
-# Images default to local registry tags — override IMAGE_TAG / REGISTRY in CI (Jenkins).
+# Images: Docker Hub public namespace demitard/*:prod-latest (push from Jenkins master pipeline).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -41,7 +41,7 @@ spec:
     spec:
       containers:
         - name: auth
-          image: circleguard/auth-service:prod-latest
+          image: demitard/auth-service:prod-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -104,7 +104,7 @@ spec:
     spec:
       containers:
         - name: identity
-          image: circleguard/identity-service:prod-latest
+          image: demitard/identity-service:prod-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -158,7 +158,7 @@ spec:
     spec:
       containers:
         - name: form
-          image: circleguard/form-service:prod-latest
+          image: demitard/form-service:prod-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -207,7 +207,7 @@ spec:
     spec:
       containers:
         - name: promotion
-          image: circleguard/promotion-service:prod-latest
+          image: demitard/promotion-service:prod-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -271,7 +271,7 @@ spec:
     spec:
       containers:
         - name: notification
-          image: circleguard/notification-service:prod-latest
+          image: demitard/notification-service:prod-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -328,7 +328,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: circleguard/gateway-service:prod-latest
+          image: demitard/gateway-service:prod-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
