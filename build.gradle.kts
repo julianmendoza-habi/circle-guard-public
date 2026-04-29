@@ -29,6 +29,13 @@ subprojects {
                 excludeTags("integration")
             }
         }
+        if (project.hasProperty("integration")) {
+            // Testcontainers lee DOCKER_HOST; útil en Jenkins con docker.sock montado.
+            environment(
+                "DOCKER_HOST",
+                System.getenv("DOCKER_HOST") ?: "unix:///var/run/docker.sock",
+            )
+        }
     }
 }
 
