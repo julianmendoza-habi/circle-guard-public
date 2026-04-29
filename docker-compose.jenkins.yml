@@ -1,5 +1,5 @@
 # Jenkins LTS (JDK 21) — uso local para CircleGuard.
-# Inicio:  docker compose -f docker-compose.jenkins.yml up -d
+# Inicio:  docker compose -f docker-compose.jenkins.yml build && docker compose -f docker-compose.jenkins.yml up -d
 # Logs:    docker compose -f docker-compose.jenkins.yml logs -f jenkins
 # Parada:  docker compose -f docker-compose.jenkins.yml down
 # UI:      http://localhost:8080
@@ -12,7 +12,10 @@
 
 services:
   jenkins:
-    image: jenkins/jenkins:lts-jdk21
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.jenkins
+    image: circleguard-jenkins:lts-jdk21-tools
     container_name: circleguard-jenkins
     restart: unless-stopped
     # El usuario por defecto es `jenkins` (uid 1000) y no suele pertenecer al grupo del
