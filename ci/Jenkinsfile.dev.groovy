@@ -8,6 +8,10 @@
  * (ver `docker-compose.jenkins.yml`). Para forzar la omisión: `SKIP_DOCKER_BUILD=true` o
  * `SKIP_K8S_DEPLOY=true` (env var de job). El deploy exige además `kubectl get --raw=/version` OK (API real);
  * si el kubeconfig apunta a un HTML de login, el stage se omite.
+ *
+ * Tras el build Docker se etiqueta `dev-latest` (como en deploy/k8s/apps/dev/microservices.yaml). Si existe el
+ * contenedor `circleguard-k3s` (k3s en Docker Compose), las imágenes se importan a containerd con `ctr import`
+ * para que el cluster no haga ImagePull de un registry inexistente.
  */
 pipeline {
     agent any
@@ -76,6 +80,13 @@ pipeline {
                               -t ${IMAGE_NAMESPACE}/${shortName}:dev-${TAG} .
                         """
                     }
+                    sh """
+                        set -eu
+                        for img in auth-service identity-service form-service promotion-service notification-service gateway-service; do
+                            docker tag circleguard/\${img}:dev-${env.TAG} circleguard/\${img}:dev-latest
+                        done
+                    """
+                    echo 'Tagged dev-* images as dev-latest for Kubernetes manifests.'
                     echo 'Configure docker login + push to your registry before production use.'
                 }
             }
@@ -104,6 +115,19 @@ pipeline {
                 }
             }
             steps {
+                sh '''
+                    set -eu
+                    K3S_CTR="${K3S_CONTAINER_NAME:-circleguard-k3s}"
+                    IMGS="auth-service identity-service form-service promotion-service notification-service gateway-service"
+                    if command -v docker >/dev/null 2>&1 && docker inspect "$K3S_CTR" >/dev/null 2>&1; then
+                        echo "[INFO] Loading circleguard/*:dev-latest into k3s (${K3S_CTR}) via ctr import..."
+                        for img in $IMGS; do
+                            docker save "circleguard/${img}:dev-latest" | docker exec -i "$K3S_CTR" ctr -n k8s.io images import -
+                        done
+                    else
+                        echo "[INFO] No local k3s container (${K3S_CTR}) or no Docker — cluster must pull dev-latest from a registry."
+                    fi
+                '''
                 sh 'kubectl apply -f deploy/k8s/namespaces.yaml'
                 sh 'kubectl apply -f deploy/k8s/infra/postgres-redis-neo4j.yaml'
                 sh 'kubectl apply -f deploy/k8s/infra/kafka-zookeeper.yaml'
