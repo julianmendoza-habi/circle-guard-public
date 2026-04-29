@@ -5,6 +5,8 @@
 ARG SERVICE_DIR=circleguard-auth-service
 
 FROM eclipse-temurin:21-jdk-alpine AS builder
+# Must repeat ARG after FROM or ${SERVICE_DIR} is empty in RUN (Gradle sees :services::bootJar).
+ARG SERVICE_DIR=circleguard-auth-service
 WORKDIR /workspace
 COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle ./gradle
