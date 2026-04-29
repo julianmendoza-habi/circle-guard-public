@@ -15,14 +15,17 @@ services:
     image: jenkins/jenkins:lts-jdk21
     container_name: circleguard-jenkins
     restart: unless-stopped
+    # El usuario por defecto es `jenkins` (uid 1000) y no suele pertenecer al grupo del
+    # socket Docker del host → Testcontainers falla con DockerClientProviderStrategy.
+    # root puede usar el socket montado (solo entorno local; no uses esto en producción).
+    user: "0:0"
     ports:
       - "8080:8080"
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
       # Testcontainers (-Pintegration) necesita el daemon Docker del host.
-      # Linux / Docker Desktop (WSL2): monta el socket. Si hay "permission denied",
-      # añade group_add con el GID del grupo docker del host (ver README en ci/).
+      # Alternativa a user root: quitar user y usar group_add + DOCKER_GID (ver ci/README).
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       TZ: UTC

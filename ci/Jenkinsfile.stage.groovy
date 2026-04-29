@@ -1,9 +1,16 @@
 /**
- * Stage pipeline: full tests including integration (-Pintegration), deploy stage namespace,
- * optional Locust performance report archived as artifact.
+ * Stage pipeline: Gradle tests, deploy stage namespace, optional Locust performance report.
+ * Integration (-Pintegration) only when RUN_INTEGRATION_TESTS is true (parameter or env).
  */
 pipeline {
     agent any
+    parameters {
+        booleanParam(
+            name: 'RUN_INTEGRATION_TESTS',
+            defaultValue: false,
+            description: 'Run Gradle -Pintegration (Testcontainers; requires Docker on the agent)',
+        )
+    }
     environment {
         LOCUST_USERS = '20'
         LOCUST_SPAWN_RATE = '2'
@@ -16,10 +23,13 @@ pipeline {
         stage('Gradle Tests (with integration)') {
             steps {
                 script {
-                    if (env.SKIP_INTEGRATION_TESTS == 'true') {
-                        sh './gradlew test --no-daemon'
-                    } else {
+                    def skip = env.SKIP_INTEGRATION_TESTS == 'true'
+                    def runIntegration =
+                        env.RUN_INTEGRATION_TESTS == 'true' || params.RUN_INTEGRATION_TESTS == true
+                    if (!skip && runIntegration) {
                         sh './gradlew test --no-daemon -Pintegration'
+                    } else {
+                        sh './gradlew test --no-daemon'
                     }
                 }
             }

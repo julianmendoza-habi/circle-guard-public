@@ -27,8 +27,8 @@ Declarative pipeline definitions live alongside the code:
 | File | Purpose |
 |------|---------|
 | [`Jenkinsfile.dev.groovy`](Jenkinsfile.dev.groovy) | Dev: Gradle tests, Docker builds, deploy `circleguard-dev` |
-| [`Jenkinsfile.stage.groovy`](Jenkinsfile.stage.groovy) | Stage: `-Pintegration`, deploy `circleguard-stage`, Locust HTML/CSV artifacts |
-| [`Jenkinsfile.master.groovy`](Jenkinsfile.master.groovy) | Master: deploy `circleguard-master`, optional E2E, release notes |
+| [`Jenkinsfile.stage.groovy`](Jenkinsfile.stage.groovy) | Stage: tests (integration opcional), deploy `circleguard-stage`, Locust HTML/CSV |
+| [`Jenkinsfile.master.groovy`](Jenkinsfile.master.groovy) | Master: tests (integration opcional), deploy `circleguard-master`, optional E2E, release notes |
 
 ---
 
@@ -38,7 +38,7 @@ Declarative pipeline definitions live alongside the code:
 
 - **JDK 21** y **`./gradlew`** ejecutable (Linux agent típico).
 - **Docker** (para los stages que construyen imágenes).
-- **Socket Docker en el contenedor Jenkins:** el [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml) monta `/var/run/docker.sock` para que **Testcontainers** funcione en el stage *Integration Tests* (`-Pintegration`). Si el usuario `jenkins` no puede usar el socket (Linux), añade `group_add` con el GID del grupo `docker` del host. Sin Docker disponible para Testcontainers, define en el job **Environment** `SKIP_INTEGRATION_TESTS=true`: en **master** se omite el stage *Integration Tests*; en **stage** el mismo bloque de Gradle ejecuta tests sin `-Pintegration`.
+- **Testcontainers (`-Pintegration`):** por defecto **no** se ejecutan en Jenkins (evita `DockerClientProviderStrategy` cuando el agente no puede usar Docker). Para activarlas: en el job marca **This project is parameterized** y el booleano **`RUN_INTEGRATION_TESTS`**, o define la variable de entorno `RUN_INTEGRATION_TESTS=true`. Necesitas Docker usable desde el agente (p. ej. [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml) con `/var/run/docker.sock` y permisos; opción `user: "0:0"` o `group_add` + GID del grupo `docker` del host). Para forzar omisión aunque `RUN_INTEGRATION_TESTS` esté en true: `SKIP_INTEGRATION_TESTS=true`.
 - **`kubectl`** con contexto apuntando a tu cluster (Minikube, Kind, EKS, etc.).
 - Plugins recomendados: **Pipeline**, **Git**, **JUnit**, **Credentials Binding**, **Pipeline: Stage View** o **Blue Ocean** (opcional).
 
@@ -69,15 +69,13 @@ Para GitHub con HTTPS: usuario + **Personal Access Token** como contraseña, o S
 Repite con otro nombre y **Script Path:**
 
 - `ci/Jenkinsfile.stage.groovy` → job `circle-guard-stage`
-- `ci/Jenkinsfile.master.groovy` → job `circle-guard-master`  
-  (en master puedes definir el parámetro `RELEASE_VERSION` en el job: *This project is parameterized*).
+- `ci/Jenkinsfile.master.groovy` → job `circle-guard-master`
 
-### Parámetros opcionales (pipeline master)
+### Parámetros del pipeline (master y stage)
 
-En el job **master**, marca **This project is parameterized** → **String Parameter**:
+La primera vez que Jenkins carga el Groovy desde SCM, registra los parámetros del pipeline. En **master**: `RELEASE_VERSION` (string) y **`RUN_INTEGRATION_TESTS`** (boolean, por defecto **false**). En **stage**: **`RUN_INTEGRATION_TESTS`** (boolean, por defecto **false**). Con el valor por defecto, Gradle corre **sin** `-Pintegration`, así el build no depende de Testcontainers/Docker en el agente.
 
-- Name: `RELEASE_VERSION`, Default: `1.0.0`  
-  El `Jenkinsfile.master.groovy` usa `${params.RELEASE_VERSION}` en release notes.
+- `RELEASE_VERSION` (solo master): usado en release notes.
 
 Variables de entorno para E2E (si activas el stage): en el job → **Build Environment** → inject:
 
