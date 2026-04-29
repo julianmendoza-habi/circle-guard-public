@@ -21,6 +21,11 @@ pipeline {
             }
         }
         stage('Integration Tests') {
+            when {
+                expression {
+                    return env.SKIP_INTEGRATION_TESTS != 'true'
+                }
+            }
             steps {
                 sh './gradlew test --no-daemon -Pintegration'
             }
