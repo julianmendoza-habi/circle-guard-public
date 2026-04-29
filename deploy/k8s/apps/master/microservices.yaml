@@ -316,6 +316,7 @@ metadata:
   name: circleguard-gateway-service
   namespace: circleguard-master
 spec:
+  progressDeadlineSeconds: 900
   replicas: 1
   selector:
     matchLabels:
@@ -331,6 +332,17 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: circleguard-runtime-master
