@@ -1,16 +1,45 @@
-# Jenkins LTS (JDK 21) — uso local para CircleGuard.
+# Jenkins LTS + k3s (Kubernetes en Docker) para pipelines CircleGuard.
+#
 # Inicio:  docker compose -f docker-compose.jenkins.yml build && docker compose -f docker-compose.jenkins.yml up -d
 # Logs:    docker compose -f docker-compose.jenkins.yml logs -f jenkins
 # Parada:  docker compose -f docker-compose.jenkins.yml down
 # UI:      http://localhost:8080
 #
-# Contraseña inicial:
+# Requisitos: Docker Desktop (WSL2 en Windows) o Linux con soporte para privileged.
+# El servicio `k3s` expone la API en localhost:6443; Jenkins usa el mismo volumen `k3s-etc` (solo lectura)
+# para generar /var/jenkins_home/.kube/config apuntando a https://k3s:6443.
+#
+# Contraseña inicial Jenkins:
 #   docker exec circleguard-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 #
-# Opcional (Linux / Docker Desktop con socket): descomenta volumes y group_add
-# para que los pipelines puedan usar `docker` en el host.
+# Probar kubectl dentro de Jenkins:
+#   docker exec -it circleguard-jenkins kubectl get nodes
+#
+# Pipeline dev (ci/Jenkinsfile.dev.groovy): si el job Jenkins corre en este host con acceso Docker,
+# el stage de deploy puede importar imágenes `circleguard/*:dev-latest` al containerd de k3s usando el
+# contenedor `circleguard-k3s`. Para otro nombre: variable de entorno del job `K3S_CONTAINER_NAME`.
 
 services:
+  # Keep in sync with kubectl ARG KUBECTL_VERSION in docker/Dockerfile.jenkins (same Kubernetes minor).
+  k3s:
+    image: rancher/k3s:v1.28.15-k3s1
+    container_name: circleguard-k3s
+    privileged: true
+    command:
+      - server
+      - --tls-san=k3s
+      - --tls-san=127.0.0.1
+      - --disable=traefik
+    environment:
+      K3S_TOKEN: circleguard-local-dev
+    volumes:
+      - k3s-etc:/etc/rancher/k3s
+      - k3s-data:/var/lib/rancher/k3s
+    ports:
+      - "6443:6443"
+    networks:
+      - circleguard
+
   jenkins:
     build:
       context: .
@@ -18,22 +47,32 @@ services:
     image: circleguard-jenkins:lts-jdk21-tools
     container_name: circleguard-jenkins
     restart: unless-stopped
-    # El usuario por defecto es `jenkins` (uid 1000) y no suele pertenecer al grupo del
-    # socket Docker del host → Testcontainers falla con DockerClientProviderStrategy.
-    # root puede usar el socket montado (solo entorno local; no uses esto en producción).
     user: "0:0"
+    depends_on:
+      k3s:
+        condition: service_started
     ports:
       - "8080:8080"
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
-      # Testcontainers (-Pintegration) necesita el daemon Docker del host.
-      # Alternativa a user root: quitar user y usar group_add + DOCKER_GID (ver ci/README).
       - /var/run/docker.sock:/var/run/docker.sock
+      - k3s-etc:/k3s-etc:ro
     environment:
+      # Root's default HOME is /root; kubectl looks at $HOME/.kube/config unless KUBECONFIG is set.
+      # docker exec often drops inherited env — keep HOME on Jenkins data dir so kubectl finds the same kubeconfig.
+      HOME: /var/jenkins_home
       TZ: UTC
-      # Evita wizard de plugins en algunos entornos (opcional):
-      # JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+      KUBECONFIG: /var/jenkins_home/.kube/config
+      K3S_API_HOST: k3s
+    networks:
+      - circleguard
+
+networks:
+  circleguard:
+    driver: bridge
 
 volumes:
   jenkins_home:
+  k3s-etc:
+  k3s-data:

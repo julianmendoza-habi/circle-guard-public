@@ -8,12 +8,19 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends docker.io ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Pin kubectl to the same minor as bundled k3s in docker-compose.jenkins.yml (skew ±1).
+ARG KUBECTL_VERSION=v1.28.15
 RUN set -eu \
     && ARCH="$(uname -m)" \
     && case "$ARCH" in aarch64 | arm64) KARCH=arm64 ;; *) KARCH=amd64 ;; esac \
-    && KVER="$(curl -fsSL https://dl.k8s.io/release/stable.txt)" \
     && curl -fsSL -o /usr/local/bin/kubectl \
-        "https://dl.k8s.io/release/${KVER}/bin/linux/${KARCH}/kubectl" \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${KARCH}/kubectl" \
     && chmod +x /usr/local/bin/kubectl
 
-USER jenkins
+COPY docker/jenkins-kubeconfig-init.sh /usr/local/bin/jenkins-kubeconfig-init.sh
+RUN chmod +x /usr/local/bin/jenkins-kubeconfig-init.sh \
+    && sed -i 's/\r$//' /usr/local/bin/jenkins-kubeconfig-init.sh
+
+# Root so the entrypoint can write ~/.kube/config when /k3s-etc is mounted (local compose uses user 0:0).
+USER root
+ENTRYPOINT ["/usr/local/bin/jenkins-kubeconfig-init.sh"]

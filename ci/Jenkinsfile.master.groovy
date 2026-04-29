@@ -82,6 +82,7 @@ pipeline {
                 }
             }
             steps {
+                echo '[INFO] Manifests use circleguard/*:prod-latest — ensure those tags exist in a registry this cluster can pull.'
                 sh 'kubectl apply -f deploy/k8s/apps/master/microservices.yaml'
                 sh 'kubectl rollout status deployment/circleguard-gateway-service -n circleguard-master --timeout=300s'
             }
