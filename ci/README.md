@@ -2,9 +2,10 @@
 
 ## Jenkins local con Docker
 
-En la raíz del repo hay [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml):
+En la raíz del repo hay [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml) y la imagen se construye desde [`docker/Dockerfile.jenkins`](../docker/Dockerfile.jenkins) (incluye **Docker CLI** y **kubectl**; la imagen oficial no los trae). Primera vez o tras cambiar el Dockerfile:
 
 ```bash
+docker compose -f docker-compose.jenkins.yml build --no-cache
 docker compose -f docker-compose.jenkins.yml up -d
 ```
 

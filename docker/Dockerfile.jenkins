@@ -1,0 +1,19 @@
+# Jenkins LTS (JDK 21) + Docker CLI + kubectl for CircleGuard pipelines.
+# Uses the host Docker daemon via mounted /var/run/docker.sock (see docker-compose.jenkins.yml).
+FROM jenkins/jenkins:lts-jdk21
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends docker.io ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu \
+    && ARCH="$(uname -m)" \
+    && case "$ARCH" in aarch64 | arm64) KARCH=arm64 ;; *) KARCH=amd64 ;; esac \
+    && KVER="$(curl -fsSL https://dl.k8s.io/release/stable.txt)" \
+    && curl -fsSL -o /usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${KVER}/bin/linux/${KARCH}/kubectl" \
+    && chmod +x /usr/local/bin/kubectl
+
+USER jenkins
