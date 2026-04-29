@@ -82,38 +82,35 @@ pipeline {
         }
         stage('Release Notes') {
             steps {
-                sh '''
-                    mkdir -p build
-                    VERSION="''' + "${params.RELEASE_VERSION}" + '''"
-                    DATE=$(date -u +%Y-%m-%d)
-                    LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
-                    if [ -n "$LAST_TAG" ]; then
-                        RANGE="$LAST_TAG..HEAD"
-                        SINCE="$LAST_TAG"
-                    else
-                        RANGE="HEAD"
-                        SINCE="repository start"
-                    fi
-                    {
-                        echo "# Release $VERSION — $DATE"
-                        echo
-                        echo "## Summary"
-                        echo "Automated release notes for CircleGuard microservices (Change Management)."
-                        echo
-                        echo "## Changes since $SINCE"
-                        git log "$RANGE" --pretty=format:"- %s (%h)" || echo "- No new commits since last tag."
-                        echo
-                        echo
-                        echo "## Deployment notes"
-                        echo "- Verify Kubernetes namespaces and image tags before rollout."
-                        echo "- Run integration tests with \\`-Pintegration\\` and E2E with \\`E2E_RUN=true\\`."
-                        echo "- Rollback: \\`kubectl rollout undo deployment/<name> -n circleguard-master\\`"
-                        echo
-                        echo "## Risk & testing"
-                        echo "- Performance: review Locust HTML report (p95 latency, RPS, failure rate)."
-                    } > build/RELEASE_NOTES.md
-                    echo "Wrote build/RELEASE_NOTES.md"
-                '''
+                withEnv(["RELEASE_VERSION=${params.RELEASE_VERSION}"]) {
+                    sh '''
+                        set -eu
+                        mkdir -p build
+                        DATE=$(date -u +%Y-%m-%d)
+                        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+                        if [ -n "$LAST_TAG" ]; then
+                            RANGE="$LAST_TAG..HEAD"
+                            SINCE="$LAST_TAG"
+                        else
+                            RANGE="HEAD"
+                            SINCE="repository start"
+                        fi
+                        {
+                            printf '# Release %s — %s\\n\\n' "$RELEASE_VERSION" "$DATE"
+                            printf '## Summary\\n'
+                            printf 'Automated release notes for CircleGuard microservices (Change Management).\\n\\n'
+                            printf '## Changes since %s\\n' "$SINCE"
+                            git log "$RANGE" --pretty=format:"- %s (%h)" || printf -- '- No new commits since last tag.'
+                            printf '\\n\\n## Deployment notes\\n'
+                            printf -- '- Verify Kubernetes namespaces and image tags before rollout.\\n'
+                            printf -- '- Run integration tests with `-Pintegration` and E2E with `E2E_RUN=true`.\\n'
+                            printf -- '- Rollback: `kubectl rollout undo deployment/<name> -n circleguard-master`\\n\\n'
+                            printf '## Risk & testing\\n'
+                            printf -- '- Performance: review Locust HTML report (p95 latency, RPS, failure rate).\\n'
+                        } > build/RELEASE_NOTES.md
+                        echo "Wrote build/RELEASE_NOTES.md"
+                    '''
+                }
                 archiveArtifacts artifacts: 'build/RELEASE_NOTES.md', fingerprint: true
             }
         }
