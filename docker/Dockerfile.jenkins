@@ -4,9 +4,12 @@ FROM jenkins/jenkins:lts-jdk21
 
 USER root
 
+# Client only (talks to the host daemon via /var/run/docker.sock). On Debian 13+ `docker.io` no longer
+# pulls the CLI when using --no-install-recommends — the `docker` binary is in package `docker-cli`.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends docker.io ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends docker-cli ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && docker --version
 
 # Pin kubectl to the same minor as bundled k3s in docker-compose.jenkins.yml (skew ±1).
 ARG KUBECTL_VERSION=v1.28.15
