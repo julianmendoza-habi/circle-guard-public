@@ -1,6 +1,7 @@
 # Jenkins LTS + k3s (Kubernetes en Docker) para pipelines CircleGuard.
 #
-# Inicio:  docker compose -f docker-compose.jenkins.yml build && docker compose -f docker-compose.jenkins.yml up -d
+# Inicio:  docker compose -f docker-compose.jenkins.yml build --no-cache && docker compose -f docker-compose.jenkins.yml up -d
+# Si dentro del contenedor `docker` no existe: imagen vieja/caché — vuelve a build desde la raíz del repo (docker/Dockerfile.jenkins).
 # Logs:    docker compose -f docker-compose.jenkins.yml logs -f jenkins
 # Parada:  docker compose -f docker-compose.jenkins.yml down
 # UI:      http://localhost:8080

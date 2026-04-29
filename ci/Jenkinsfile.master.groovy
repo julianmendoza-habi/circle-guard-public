@@ -84,7 +84,23 @@ pipeline {
             steps {
                 echo '[INFO] Manifests use circleguard/*:prod-latest — ensure those tags exist in a registry this cluster can pull.'
                 sh 'kubectl apply -f deploy/k8s/apps/master/microservices.yaml'
-                sh 'kubectl rollout status deployment/circleguard-gateway-service -n circleguard-master --timeout=300s'
+                sh '''
+                    set -eu
+                    NS=circleguard-master
+                    TIMEOUT=600s
+                    # Backends first, then gateway (Redis/routes); generous timeout for image pull + JVM.
+                    for d in circleguard-auth-service circleguard-identity-service circleguard-form-service circleguard-promotion-service circleguard-notification-service circleguard-gateway-service
+                    do
+                        echo "[INFO] kubectl rollout status deployment/${d} -n ${NS} --timeout=${TIMEOUT}"
+                        kubectl rollout status "deployment/${d}" -n "${NS}" --timeout="${TIMEOUT}" || {
+                            echo "[ERROR] Rollout failed for ${d} — describe / pods / logs:"
+                            kubectl describe "deployment/${d}" -n "${NS}" || true
+                            kubectl get pods -n "${NS}" -l "app=${d}" -o wide || true
+                            kubectl logs -n "${NS}" -l "app=${d}" --tail=120 --all-containers=true || true
+                            exit 1
+                        }
+                    done
+                '''
             }
         }
         stage('Smoke E2E') {

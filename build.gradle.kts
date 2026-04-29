@@ -39,7 +39,6 @@ subprojects {
             exclude("**/HealthStatusReevaluationTest.class")
             exclude("**/AdministrativeCorrectionTest.class")
             exclude("**/PromotionPerformanceTest.class")
-            exclude("**/AttachmentControllerTest.class")
         }
         if (project.hasProperty("integration")) {
             // Testcontainers lee DOCKER_HOST; útil en Jenkins con docker.sock montado.
