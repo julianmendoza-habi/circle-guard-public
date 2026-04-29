@@ -4,9 +4,9 @@
  * Integration tests (Testcontainers) run only when RUN_INTEGRATION_TESTS is enabled (job parameter or
  * env) and the Jenkins agent can use the host Docker socket — otherwise they fail inside Jenkins.
  *
- * The Kubernetes deploy stage detects whether `kubectl` is available on the agent. If not, the stage
- * is skipped with a clear warning instead of breaking the build. To force-skip, set
- * SKIP_K8S_DEPLOY=true as a job env var.
+ * The Kubernetes deploy stage runs only when `kubectl` is available and `kubectl get --raw=/version`
+ * succeeds (real API server). Wrong kubeconfig (e.g. HTML login instead of OpenAPI) skips the stage.
+ * To force-skip, set SKIP_K8S_DEPLOY=true as a job env var.
  */
 pipeline {
     agent any
@@ -33,7 +33,7 @@ pipeline {
             }
             post {
                 always {
-                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml'
+                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml,**/build/test-results/integrationTest/*.xml'
                 }
             }
         }
@@ -52,6 +52,11 @@ pipeline {
             steps {
                 sh './gradlew test --no-daemon -Pintegration'
             }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml,**/build/test-results/integrationTest/*.xml'
+                }
+            }
         }
         stage('Deploy Kubernetes (master)') {
             when {
@@ -65,8 +70,15 @@ pipeline {
                         echo '[WARN] `kubectl` no disponible en el agente Jenkins. Stage omitido. ' +
                             'Instala kubectl o usa la imagen `docker/Dockerfile.jenkins`. ' +
                             'Para silenciar este aviso, marca SKIP_K8S_DEPLOY=true.'
+                        return false
                     }
-                    return hasKubectl
+                    def clusterOk = sh(script: 'kubectl get --raw=/version >/dev/null 2>&1', returnStatus: true) == 0
+                    if (!clusterOk) {
+                        echo '[WARN] kubectl está instalado pero la API del cluster no responde (kubeconfig incorrecto, ' +
+                            'proxy o página de login en lugar del servidor Kubernetes). Stage omitido. ' +
+                            'Corrige KUBECONFIG o marca SKIP_K8S_DEPLOY=true.'
+                    }
+                    return clusterOk
                 }
             }
             steps {

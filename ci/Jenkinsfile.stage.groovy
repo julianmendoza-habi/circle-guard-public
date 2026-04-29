@@ -48,7 +48,7 @@ pipeline {
             }
             post {
                 always {
-                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml'
+                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml,**/build/test-results/integrationTest/*.xml'
                 }
             }
         }
@@ -69,8 +69,15 @@ pipeline {
                         echo '[WARN] `kubectl` no disponible en el agente Jenkins. Stage omitido. ' +
                             'Instala kubectl o usa la imagen `docker/Dockerfile.jenkins`. ' +
                             'Para silenciar este aviso, marca SKIP_K8S_DEPLOY=true.'
+                        return false
                     }
-                    return hasKubectl
+                    def clusterOk = sh(script: 'kubectl get --raw=/version >/dev/null 2>&1', returnStatus: true) == 0
+                    if (!clusterOk) {
+                        echo '[WARN] kubectl está instalado pero la API del cluster no responde (kubeconfig incorrecto, ' +
+                            'proxy o página de login en lugar del servidor Kubernetes). Stage omitido. ' +
+                            'Corrige KUBECONFIG o marca SKIP_K8S_DEPLOY=true.'
+                    }
+                    return clusterOk
                 }
             }
             steps {
