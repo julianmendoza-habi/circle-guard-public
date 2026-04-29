@@ -4,9 +4,9 @@
  * Integration tests (Testcontainers) run only when RUN_INTEGRATION_TESTS is enabled (job parameter or
  * env) and the Jenkins agent can use the host Docker socket — otherwise they fail inside Jenkins.
  *
- * The Kubernetes deploy stage detects whether `kubectl` is available on the agent. If not, the stage
- * is skipped with a clear warning instead of breaking the build. To force-skip, set
- * SKIP_K8S_DEPLOY=true as a job env var.
+ * The Kubernetes deploy stage runs only when `kubectl` is available and `kubectl get --raw=/version`
+ * succeeds (real API server). Wrong kubeconfig (e.g. HTML login instead of OpenAPI) skips the stage.
+ * To force-skip, set SKIP_K8S_DEPLOY=true as a job env var.
  */
 pipeline {
     agent any
@@ -33,7 +33,7 @@ pipeline {
             }
             post {
                 always {
-                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml'
+                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml,**/build/test-results/integrationTest/*.xml'
                 }
             }
         }
@@ -52,6 +52,11 @@ pipeline {
             steps {
                 sh './gradlew test --no-daemon -Pintegration'
             }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml,**/build/test-results/integrationTest/*.xml'
+                }
+            }
         }
         stage('Deploy Kubernetes (master)') {
             when {
@@ -65,8 +70,15 @@ pipeline {
                         echo '[WARN] `kubectl` no disponible en el agente Jenkins. Stage omitido. ' +
                             'Instala kubectl o usa la imagen `docker/Dockerfile.jenkins`. ' +
                             'Para silenciar este aviso, marca SKIP_K8S_DEPLOY=true.'
+                        return false
                     }
-                    return hasKubectl
+                    def clusterOk = sh(script: 'kubectl get --raw=/version >/dev/null 2>&1', returnStatus: true) == 0
+                    if (!clusterOk) {
+                        echo '[WARN] kubectl está instalado pero la API del cluster no responde (kubeconfig incorrecto, ' +
+                            'proxy o página de login en lugar del servidor Kubernetes). Stage omitido. ' +
+                            'Corrige KUBECONFIG o marca SKIP_K8S_DEPLOY=true.'
+                    }
+                    return clusterOk
                 }
             }
             steps {
@@ -82,38 +94,35 @@ pipeline {
         }
         stage('Release Notes') {
             steps {
-                sh '''
-                    mkdir -p build
-                    VERSION="''' + "${params.RELEASE_VERSION}" + '''"
-                    DATE=$(date -u +%Y-%m-%d)
-                    LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
-                    if [ -n "$LAST_TAG" ]; then
-                        RANGE="$LAST_TAG..HEAD"
-                        SINCE="$LAST_TAG"
-                    else
-                        RANGE="HEAD"
-                        SINCE="repository start"
-                    fi
-                    {
-                        echo "# Release $VERSION — $DATE"
-                        echo
-                        echo "## Summary"
-                        echo "Automated release notes for CircleGuard microservices (Change Management)."
-                        echo
-                        echo "## Changes since $SINCE"
-                        git log "$RANGE" --pretty=format:"- %s (%h)" || echo "- No new commits since last tag."
-                        echo
-                        echo
-                        echo "## Deployment notes"
-                        echo "- Verify Kubernetes namespaces and image tags before rollout."
-                        echo "- Run integration tests with \\`-Pintegration\\` and E2E with \\`E2E_RUN=true\\`."
-                        echo "- Rollback: \\`kubectl rollout undo deployment/<name> -n circleguard-master\\`"
-                        echo
-                        echo "## Risk & testing"
-                        echo "- Performance: review Locust HTML report (p95 latency, RPS, failure rate)."
-                    } > build/RELEASE_NOTES.md
-                    echo "Wrote build/RELEASE_NOTES.md"
-                '''
+                withEnv(["RELEASE_VERSION=${params.RELEASE_VERSION}"]) {
+                    sh '''
+                        set -eu
+                        mkdir -p build
+                        DATE=$(date -u +%Y-%m-%d)
+                        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+                        if [ -n "$LAST_TAG" ]; then
+                            RANGE="$LAST_TAG..HEAD"
+                            SINCE="$LAST_TAG"
+                        else
+                            RANGE="HEAD"
+                            SINCE="repository start"
+                        fi
+                        {
+                            printf '# Release %s — %s\\n\\n' "$RELEASE_VERSION" "$DATE"
+                            printf '## Summary\\n'
+                            printf 'Automated release notes for CircleGuard microservices (Change Management).\\n\\n'
+                            printf '## Changes since %s\\n' "$SINCE"
+                            git log "$RANGE" --pretty=format:"- %s (%h)" || printf -- '- No new commits since last tag.'
+                            printf '\\n\\n## Deployment notes\\n'
+                            printf -- '- Verify Kubernetes namespaces and image tags before rollout.\\n'
+                            printf -- '- Run integration tests with `-Pintegration` and E2E with `E2E_RUN=true`.\\n'
+                            printf -- '- Rollback: `kubectl rollout undo deployment/<name> -n circleguard-master`\\n\\n'
+                            printf '## Risk & testing\\n'
+                            printf -- '- Performance: review Locust HTML report (p95 latency, RPS, failure rate).\\n'
+                        } > build/RELEASE_NOTES.md
+                        echo "Wrote build/RELEASE_NOTES.md"
+                    '''
+                }
                 archiveArtifacts artifacts: 'build/RELEASE_NOTES.md', fingerprint: true
             }
         }
