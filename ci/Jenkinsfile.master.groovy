@@ -1,10 +1,18 @@
 /**
  * Master/prod pipeline: gates on tests, deploy prod namespace, smoke E2E, Release Notes artifact.
+ *
+ * Integration tests (Testcontainers) run only when RUN_INTEGRATION_TESTS is enabled (job parameter or
+ * env) and the Jenkins agent can use the host Docker socket — otherwise they fail inside Jenkins.
  */
 pipeline {
     agent any
     parameters {
         string(name: 'RELEASE_VERSION', defaultValue: '1.0.0', description: 'Semantic version for release notes')
+        booleanParam(
+            name: 'RUN_INTEGRATION_TESTS',
+            defaultValue: false,
+            description: 'Run Gradle -Pintegration (Testcontainers; requires Docker usable from the agent)',
+        )
     }
     stages {
         stage('Checkout') {
@@ -23,8 +31,14 @@ pipeline {
         stage('Integration Tests') {
             when {
                 expression {
-                    return env.SKIP_INTEGRATION_TESTS != 'true'
+                    if (env.SKIP_INTEGRATION_TESTS == 'true') {
+                        return false
+                    }
+                    return env.RUN_INTEGRATION_TESTS == 'true' || params.RUN_INTEGRATION_TESTS == true
                 }
+            }
+            environment {
+                DOCKER_HOST = 'unix:///var/run/docker.sock'
             }
             steps {
                 sh './gradlew test --no-daemon -Pintegration'

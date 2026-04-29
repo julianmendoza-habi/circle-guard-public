@@ -1,6 +1,6 @@
 /**
- * Dev pipeline: unit tests (integration excluded by default), Docker build/push, deploy to circleguard-dev.
- * Optional credentials when you add docker login/push: registry URL or kubeconfig.
+ * Dev pipeline: `./gradlew test` sin `-Pintegration` (sin Testcontainers). Docker build usa el demonio
+ * del host; si falla, monta docker.sock (ver docker-compose.jenkins.yml). Optional: docker login/push.
  */
 pipeline {
     agent any
