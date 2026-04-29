@@ -6,6 +6,45 @@ plugins {
     kotlin("plugin.jpa")
 }
 
+/**
+ * Testcontainers live under src/integrationTest so `./gradlew test` never loads those classes on CI
+ * agents without Docker (avoids DockerClientProviderStrategy during default test compilation/run).
+ * With `-Pintegration`, `test` finalizedBy runs `integrationTest`.
+ */
+sourceSets {
+    val main by getting
+    val test by getting
+    create("integrationTest") {
+        java.setSrcDirs(listOf("src/integrationTest/java"))
+        // AuthRepositoryTestApplication lives in src/test; integration tests need that slice on the classpath.
+        compileClasspath += main.output + test.output + configurations.testCompileClasspath.get()
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+val integrationTestSourceSet = sourceSets.named("integrationTest").get()
+configurations.named(integrationTestSourceSet.implementationConfigurationName) {
+    extendsFrom(configurations.testImplementation.get())
+}
+configurations.named(integrationTestSourceSet.runtimeOnlyConfigurationName) {
+    extendsFrom(configurations.testRuntimeOnly.get())
+}
+
+tasks.register<Test>("integrationTest") {
+    description = "Runs JDBC integration tests against PostgreSQL (Testcontainers)."
+    group = "verification"
+    useJUnitPlatform()
+    testClassesDirs = integrationTestSourceSet.output.classesDirs
+    classpath = integrationTestSourceSet.runtimeClasspath
+    shouldRunAfter(tasks.test)
+}
+
+tasks.named<Test>("test") {
+    if (project.hasProperty("integration")) {
+        finalizedBy(tasks.named("integrationTest"))
+    }
+}
+
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
     testImplementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
