@@ -1,9 +1,27 @@
 /**
- * Dev pipeline: `./gradlew test` sin `-Pintegration` (sin Testcontainers). Docker build usa el demonio
- * del host; si falla, monta docker.sock (ver docker-compose.jenkins.yml). Optional: docker login/push.
+ * Dev pipeline: `./gradlew test` sin `-Pintegration` (sin Testcontainers).
+ *
+ * Los stages de Docker y Kubernetes detectan automáticamente si las CLIs (`docker`, `kubectl`)
+ * están disponibles en el agente Jenkins. Si no, el stage se omite con un mensaje claro
+ * (en lugar de fallar con `command not found`). Para construir imágenes desde Jenkins, usa el
+ * `docker/Dockerfile.jenkins` que incluye Docker CLI + kubectl, o monta el socket del host
+ * (ver `docker-compose.jenkins.yml`). Para forzar la omisión: `SKIP_DOCKER_BUILD=true` o
+ * `SKIP_K8S_DEPLOY=true` (env var de job).
  */
 pipeline {
     agent any
+    parameters {
+        booleanParam(
+            name: 'SKIP_DOCKER_BUILD',
+            defaultValue: false,
+            description: 'Saltar la construcción de imágenes Docker (útil si el agente no tiene docker CLI)',
+        )
+        booleanParam(
+            name: 'SKIP_K8S_DEPLOY',
+            defaultValue: false,
+            description: 'Saltar despliegue Kubernetes (útil si el agente no tiene kubectl o cluster)',
+        )
+    }
     environment {
         IMAGE_NAMESPACE = 'circleguard'
         TAG = "${env.GIT_COMMIT.take(7)}-${env.BUILD_NUMBER}"
@@ -23,6 +41,22 @@ pipeline {
             }
         }
         stage('Docker Build & Push (six services)') {
+            when {
+                expression {
+                    if (params.SKIP_DOCKER_BUILD == true || env.SKIP_DOCKER_BUILD == 'true') {
+                        echo 'Stage saltado por SKIP_DOCKER_BUILD=true.'
+                        return false
+                    }
+                    def hasDocker = sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0
+                    if (!hasDocker) {
+                        echo '[WARN] `docker` CLI no disponible en el agente Jenkins. ' +
+                            'Stage omitido. Reconstruye Jenkins con `docker/Dockerfile.jenkins` ' +
+                            'o monta el socket Docker del host (ver `docker-compose.jenkins.yml`). ' +
+                            'Para silenciar este aviso, marca SKIP_DOCKER_BUILD=true.'
+                    }
+                    return hasDocker
+                }
+            }
             steps {
                 script {
                     def svcs = [
@@ -46,6 +80,21 @@ pipeline {
             }
         }
         stage('Deploy Kubernetes (dev)') {
+            when {
+                expression {
+                    if (params.SKIP_K8S_DEPLOY == true || env.SKIP_K8S_DEPLOY == 'true') {
+                        echo 'Stage saltado por SKIP_K8S_DEPLOY=true.'
+                        return false
+                    }
+                    def hasKubectl = sh(script: 'command -v kubectl >/dev/null 2>&1', returnStatus: true) == 0
+                    if (!hasKubectl) {
+                        echo '[WARN] `kubectl` no disponible en el agente Jenkins. Stage omitido. ' +
+                            'Instala kubectl o usa la imagen `docker/Dockerfile.jenkins`. ' +
+                            'Para silenciar este aviso, marca SKIP_K8S_DEPLOY=true.'
+                    }
+                    return hasKubectl
+                }
+            }
             steps {
                 sh 'kubectl apply -f deploy/k8s/namespaces.yaml'
                 sh 'kubectl apply -f deploy/k8s/infra/postgres-redis-neo4j.yaml'
