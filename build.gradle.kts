@@ -29,6 +29,18 @@ subprojects {
                 excludeTags("integration")
             }
         }
+        if (!project.hasProperty("integration")) {
+            // JUnit's tag filter runs *after* test classes are loaded, so any class with a
+            // static `@Container` field can still trigger Testcontainers' Docker discovery
+            // (DockerClientProviderStrategy) and fail with `initializationError` when the
+            // agent has no Docker. We exclude the bytecode by path/name to prevent loading.
+            exclude("**/integration/**")
+            exclude("**/*IntegrationTest.class")
+            exclude("**/HealthStatusReevaluationTest.class")
+            exclude("**/AdministrativeCorrectionTest.class")
+            exclude("**/PromotionPerformanceTest.class")
+            exclude("**/AttachmentControllerTest.class")
+        }
         if (project.hasProperty("integration")) {
             // Testcontainers lee DOCKER_HOST; útil en Jenkins con docker.sock montado.
             environment(

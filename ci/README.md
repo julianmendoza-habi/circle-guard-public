@@ -2,9 +2,10 @@
 
 ## Jenkins local con Docker
 
-En la raíz del repo hay [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml):
+En la raíz del repo hay [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml) y la imagen se construye desde [`docker/Dockerfile.jenkins`](../docker/Dockerfile.jenkins) (incluye **Docker CLI** y **kubectl**; la imagen oficial no los trae). Primera vez o tras cambiar el Dockerfile:
 
 ```bash
+docker compose -f docker-compose.jenkins.yml build --no-cache
 docker compose -f docker-compose.jenkins.yml up -d
 ```
 
@@ -111,3 +112,34 @@ por valores fijos o quitar el bloque hasta que tengas registry.
 | Master | `ci/Jenkinsfile.master.groovy` |
 
 Rama recomendada: `master`. Tras el primer push exitoso, las ejecuciones aparecen en Stage View / Blue Ocean con los stages definidos en cada archivo.
+
+---
+
+## Troubleshooting
+
+### `docker: not found` en el stage *Docker Build & Push*
+
+El agente Jenkins no tiene la **CLI de Docker**. Soluciones:
+
+1. Construye Jenkins con `docker/Dockerfile.jenkins` (incluye Docker CLI + kubectl):
+   ```bash
+   docker compose -f docker-compose.jenkins.yml build --no-cache
+   docker compose -f docker-compose.jenkins.yml up -d
+   ```
+2. Si solo quieres validar tests/lint sin construir imágenes, marca el parámetro **`SKIP_DOCKER_BUILD=true`** del job (o env var `SKIP_DOCKER_BUILD=true`). El stage se omite con un aviso, **sin** romper la pipeline.
+3. El pipeline **detecta automáticamente** si `docker` no está disponible y omite el stage con `[WARN]`. La pipeline sigue verde para que los demás stages se ejecuten.
+
+### `kubectl: command not found` o cluster no accesible
+
+Aplica el mismo principio: el pipeline detecta `kubectl` y omite el deploy si falta. Para forzarlo, marca **`SKIP_K8S_DEPLOY=true`**.
+
+### `LocalUserRepositoryJdbcIntegrationTest > initializationError` con `DockerClientProviderStrategy`
+
+Esto ocurre cuando las pruebas de integración (Testcontainers) se ejecutan sin Docker disponible. La build de Gradle ahora **excluye a nivel de archivo** las clases de integración cuando no se pasa `-Pintegration` (mira `build.gradle.kts`), porque el filtro por tag de JUnit Platform corre **después** de cargar la clase y los campos `@Container static` ya intentan resolver el cliente Docker.
+
+Si necesitas correr tests de integración en Jenkins:
+
+- Asegura Docker en el agente (socket montado, ver `docker-compose.jenkins.yml`).
+- Marca **`RUN_INTEGRATION_TESTS=true`** en master/stage.
+
+Para forzar omisión incluso si `RUN_INTEGRATION_TESTS=true`: define `SKIP_INTEGRATION_TESTS=true` en el entorno del job.
