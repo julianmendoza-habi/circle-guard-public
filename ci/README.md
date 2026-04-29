@@ -1,5 +1,27 @@
 # Jenkins pipelines (CircleGuard)
 
+## Jenkins local con Docker
+
+En la raíz del repo hay [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml):
+
+```bash
+docker compose -f docker-compose.jenkins.yml up -d
+```
+
+- **URL:** http://localhost:8080  
+- **Contraseña inicial del administrador:**
+
+  ```bash
+  docker exec circleguard-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+  ```
+
+- **Parar:** `docker compose -f docker-compose.jenkins.yml down`  
+- Los datos persisten en el volumen Docker `jenkins_home`.
+
+La primera vez Jenkins muestra el asistente de plugins; puedes instalar los sugeridos y crear un usuario admin.
+
+---
+
 Declarative pipeline definitions live alongside the code:
 
 | File | Purpose |

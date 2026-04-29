@@ -1,0 +1,31 @@
+# Jenkins LTS (JDK 21) — uso local para CircleGuard.
+# Inicio:  docker compose -f docker-compose.jenkins.yml up -d
+# Logs:    docker compose -f docker-compose.jenkins.yml logs -f jenkins
+# Parada:  docker compose -f docker-compose.jenkins.yml down
+# UI:      http://localhost:8080
+#
+# Contraseña inicial:
+#   docker exec circleguard-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+#
+# Opcional (Linux / Docker Desktop con socket): descomenta volumes y group_add
+# para que los pipelines puedan usar `docker` en el host.
+
+services:
+  jenkins:
+    image: jenkins/jenkins:lts-jdk21
+    container_name: circleguard-jenkins
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      # Descomenta en Linux o si Docker Desktop expone el socket al contenedor:
+      # - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: UTC
+      # Evita wizard de plugins en algunos entornos (opcional):
+      # JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+
+volumes:
+  jenkins_home:
