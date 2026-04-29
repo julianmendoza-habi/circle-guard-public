@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: circleguard-dev
+  labels:
+    app.kubernetes.io/part-of: circleguard
+    environment: dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: circleguard-stage
+  labels:
+    app.kubernetes.io/part-of: circleguard
+    environment: stage
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: circleguard-master
+  labels:
+    app.kubernetes.io/part-of: circleguard
+    environment: production

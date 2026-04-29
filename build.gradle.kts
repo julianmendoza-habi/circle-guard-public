@@ -17,12 +17,23 @@ allprojects {
 
 subprojects {
     apply(plugin = "java")
-    apply(plugin = "org.jetbrains.kotlin.jvm")
     extensions.configure<JavaPluginExtension> {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(21))
         }
     }
+
+    tasks.withType<Test> {
+        useJUnitPlatform {
+            if (!project.hasProperty("integration")) {
+                excludeTags("integration")
+            }
+        }
+    }
+}
+
+configure(subprojects.filter { it.name != "e2e-tests" }) {
+    apply(plugin = "org.jetbrains.kotlin.jvm")
 
     dependencies {
         "implementation"(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
@@ -41,9 +52,5 @@ subprojects {
             freeCompilerArgs = listOf("-Xjsr305=strict")
             jvmTarget = "21"
         }
-    }
-
-    tasks.withType<Test> {
-        useJUnitPlatform()
     }
 }

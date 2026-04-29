@@ -1,0 +1,12 @@
+.git
+.github
+.cursor
+.gradle
+**/build
+**/bin
+mobile/node_modules
+**/.idea
+**/*.iml
+*.md
+!README.md
+agent-transcripts

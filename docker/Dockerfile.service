@@ -1,0 +1,23 @@
+# Multi-stage build for CircleGuard Spring Boot services (Java 21).
+# Usage:
+#   docker build -f docker/Dockerfile.service --build-arg SERVICE_DIR=circleguard-auth-service -t circleguard/auth-service:local .
+
+ARG SERVICE_DIR=circleguard-auth-service
+
+FROM eclipse-temurin:21-jdk-alpine AS builder
+WORKDIR /workspace
+COPY gradlew settings.gradle.kts build.gradle.kts ./
+COPY gradle ./gradle
+COPY services ./services
+RUN chmod +x gradlew \
+    && ./gradlew :services:${SERVICE_DIR}:bootJar -x test --no-daemon
+
+FROM eclipse-temurin:21-jre-alpine
+ARG SERVICE_DIR=circleguard-auth-service
+WORKDIR /app
+RUN addgroup -g 1000 circleguard && adduser -u 1000 -G circleguard -D circleguard
+COPY --from=builder /workspace/services/${SERVICE_DIR}/build/libs/*.jar /app/app.jar
+USER circleguard:circleguard
+EXPOSE 8080
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0"
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

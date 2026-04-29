@@ -1,0 +1,366 @@
+# Deploy selected CircleGuard microservices into circleguard-master.
+# Prerequisites: namespaces + infra (postgres-redis-neo4j, kafka-zookeeper, openldap).
+# Images default to local registry tags — override IMAGE_TAG / REGISTRY in CI (Jenkins).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: circleguard-runtime-master
+  namespace: circleguard-master
+data:
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka.circleguard-infra.svc.cluster.local:9092
+  POSTGRES_HOST: postgres.circleguard-infra.svc.cluster.local
+  REDIS_HOST: redis.circleguard-infra.svc.cluster.local
+  NEO4J_URI: bolt://neo4j.circleguard-infra.svc.cluster.local:7687
+  LDAP_PRIMARY_URL: ldap://openldap.circleguard-infra.svc.cluster.local:389
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: circleguard-shared-secret
+  namespace: circleguard-master
+type: Opaque
+stringData:
+  datasource-password: password
+  jwt-secret: my-super-secret-dev-key-32-chars-long-12345678
+  qr-secret: my-qr-secret-key-for-dev-1234567890
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-auth-service
+  namespace: circleguard-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-auth-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-auth-service
+    spec:
+      containers:
+        - name: auth
+          image: circleguard/auth-service:prod-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: circleguard-runtime-master
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_auth
+            - name: SPRING_DATASOURCE_USERNAME
+              value: admin
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: datasource-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: jwt-secret
+            - name: QR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: qr-secret
+            - name: SPRING_LDAP_URLS
+              value: ldap://openldap.circleguard-infra.svc.cluster.local:389
+            - name: CIRCLEGUARD_IDENTITY_MAP_URL
+              value: http://circleguard-identity-service.circleguard-master.svc.cluster.local:8080/api/v1/identities/map
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-auth-service
+  namespace: circleguard-master
+spec:
+  selector:
+    app: circleguard-auth-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-identity-service
+  namespace: circleguard-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-identity-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-identity-service
+    spec:
+      containers:
+        - name: identity
+          image: circleguard/identity-service:prod-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: circleguard-runtime-master
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_identity
+            - name: SPRING_DATASOURCE_USERNAME
+              value: admin
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: datasource-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: jwt-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-identity-service
+  namespace: circleguard-master
+spec:
+  selector:
+    app: circleguard-identity-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-form-service
+  namespace: circleguard-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-form-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-form-service
+    spec:
+      containers:
+        - name: form
+          image: circleguard/form-service:prod-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: circleguard-runtime-master
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_form
+            - name: SPRING_DATASOURCE_USERNAME
+              value: admin
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: datasource-password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-form-service
+  namespace: circleguard-master
+spec:
+  selector:
+    app: circleguard-form-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-promotion-service
+  namespace: circleguard-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-promotion-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-promotion-service
+    spec:
+      containers:
+        - name: promotion
+          image: circleguard/promotion-service:prod-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: circleguard-runtime-master
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_promotion
+            - name: SPRING_DATASOURCE_USERNAME
+              value: admin
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: datasource-password
+            - name: SPRING_DATA_REDIS_HOST
+              value: redis.circleguard-infra.svc.cluster.local
+            - name: SPRING_DATA_REDIS_PORT
+              value: "6379"
+            - name: SPRING_NEO4J_URI
+              value: bolt://neo4j.circleguard-infra.svc.cluster.local:7687
+            - name: SPRING_NEO4J_AUTHENTICATION_USERNAME
+              value: neo4j
+            - name: SPRING_NEO4J_AUTHENTICATION_PASSWORD
+              value: password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: jwt-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-promotion-service
+  namespace: circleguard-master
+spec:
+  selector:
+    app: circleguard-promotion-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-notification-service
+  namespace: circleguard-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-notification-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-notification-service
+    spec:
+      containers:
+        - name: notification
+          image: circleguard/notification-service:prod-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: circleguard-runtime-master
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: AUTH_API_URL
+              value: http://circleguard-auth-service.circleguard-master.svc.cluster.local:8080
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: jwt-secret
+            - name: QR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: qr-secret
+            - name: SPRING_MAIL_HOST
+              value: localhost
+            - name: SPRING_MAIL_PORT
+              value: "1025"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-notification-service
+  namespace: circleguard-master
+spec:
+  selector:
+    app: circleguard-notification-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: circleguard-gateway-service
+  namespace: circleguard-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: circleguard-gateway-service
+  template:
+    metadata:
+      labels:
+        app: circleguard-gateway-service
+    spec:
+      containers:
+        - name: gateway
+          image: circleguard/gateway-service:prod-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: circleguard-runtime-master
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: SPRING_DATA_REDIS_HOST
+              value: redis.circleguard-infra.svc.cluster.local
+            - name: SPRING_DATA_REDIS_PORT
+              value: "6379"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: jwt-secret
+            - name: QR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: circleguard-shared-secret
+                  key: qr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: circleguard-gateway-service
+  namespace: circleguard-master
+spec:
+  selector:
+    app: circleguard-gateway-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+

@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
@@ -23,6 +24,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(LoginController.class)
 @Import(SecurityConfig.class)
+@TestPropertySource(
+        properties = {
+            "spring.ldap.urls=ldap://localhost:389",
+            "spring.ldap.base=dc=circleguard,dc=edu",
+            "spring.ldap.username=cn=admin,dc=circleguard,dc=edu",
+            "spring.ldap.password=admin",
+            "circleguard.identity.map-url=http://localhost:8083/api/v1/identities/map"
+        })
 public class LoginControllerTest {
 
     @Autowired

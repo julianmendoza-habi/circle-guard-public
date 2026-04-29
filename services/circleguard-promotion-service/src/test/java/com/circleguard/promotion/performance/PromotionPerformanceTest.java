@@ -2,6 +2,7 @@ package com.circleguard.promotion.performance;
 
 import com.circleguard.promotion.service.HealthStatusService;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 @Testcontainers
+@Tag("integration")
 public class PromotionPerformanceTest {
 
     @Container

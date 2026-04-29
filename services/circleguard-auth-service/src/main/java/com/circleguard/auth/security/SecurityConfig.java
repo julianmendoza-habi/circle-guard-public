@@ -15,6 +15,7 @@ import org.springframework.security.ldap.authentication.BindAuthenticator;
 import org.springframework.security.ldap.authentication.LdapAuthenticationProvider;
 import org.springframework.security.ldap.userdetails.DefaultLdapAuthoritiesPopulator;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.beans.factory.annotation.Value;
 
 @Configuration
 @EnableWebSecurity
@@ -54,12 +55,17 @@ public class SecurityConfig {
     }
 
     @Bean
-    public LdapContextSource contextSource() {
+    public LdapContextSource contextSource(
+            @Value("${spring.ldap.urls:ldap://localhost:389}") String ldapUrls,
+            @Value("${spring.ldap.base:dc=circleguard,dc=edu}") String ldapBase,
+            @Value("${spring.ldap.username:cn=admin,dc=circleguard,dc=edu}") String ldapUsername,
+            @Value("${spring.ldap.password:admin}") String ldapPassword) {
         LdapContextSource contextSource = new LdapContextSource();
-        contextSource.setUrl("ldap://localhost:389");
-        contextSource.setBase("dc=circleguard,dc=edu");
-        contextSource.setUserDn("cn=admin,dc=circleguard,dc=edu");
-        contextSource.setPassword("admin");
+        String primaryUrl = ldapUrls.split(",")[0].trim();
+        contextSource.setUrl(primaryUrl);
+        contextSource.setBase(ldapBase);
+        contextSource.setUserDn(ldapUsername);
+        contextSource.setPassword(ldapPassword);
         return contextSource;
     }
 
