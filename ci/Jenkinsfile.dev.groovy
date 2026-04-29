@@ -1,11 +1,10 @@
 /**
  * Dev pipeline: unit tests (integration excluded by default), Docker build/push, deploy to circleguard-dev.
- * Jenkins credentials (examples): docker-registry, kubeconfig file.
+ * Optional credentials when you add docker login/push: registry URL or kubeconfig.
  */
 pipeline {
     agent any
     environment {
-        REGISTRY = credentials('docker-registry-url')
         IMAGE_NAMESPACE = 'circleguard'
         TAG = "${env.GIT_COMMIT.take(7)}-${env.BUILD_NUMBER}"
     }
