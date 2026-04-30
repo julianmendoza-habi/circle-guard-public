@@ -43,13 +43,12 @@ pipeline {
                         sh '''
                             set -eu
                             if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
-                            ./gradlew test --no-daemon -Pintegration
+                            ./gradlew test --parallel --build-cache -Pintegration
                         '''
                     } else {
                         sh '''
                             set -eu
-                            if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
-                            ./gradlew test --no-daemon
+                            ./gradlew test --parallel --build-cache
                         '''
                     }
                 }

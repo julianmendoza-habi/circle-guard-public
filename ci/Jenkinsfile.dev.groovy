@@ -39,8 +39,7 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
-                    ./gradlew test --no-daemon
+                    ./gradlew test --parallel --build-cache
                 '''
             }
             post {
@@ -86,7 +85,7 @@ pipeline {
                           :services:circleguard-promotion-service:bootJar \\
                           :services:circleguard-notification-service:bootJar \\
                           :services:circleguard-gateway-service:bootJar \\
-                          -x test --no-daemon
+                          -x test --parallel --build-cache
                     '''
                     svcs.each { svcDir ->
                         def shortName = svcDir.replaceFirst(/^circleguard-/, '')
