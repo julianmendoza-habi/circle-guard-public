@@ -325,6 +325,19 @@ spec:
       labels:
         app: circleguard-gateway-service
     spec:
+      initContainers:
+        # Avoid Spring Boot failing Redis handshake while Redis pod is still starting (progress deadline).
+        - name: wait-for-redis
+          image: redis:7.2-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h redis.circleguard-infra.svc.cluster.local ping | grep -q PONG
+              do
+                echo waiting for redis
+                sleep 2
+              done
       containers:
         - name: gateway
           image: circleguard/gateway-service:dev-latest
