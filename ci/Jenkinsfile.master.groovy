@@ -50,9 +50,7 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    # Jenkins-in-Docker (Linux): point Testcontainers at the mounted host daemon — do not inherit Docker Desktop npipe from Windows.
-                    if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
-                    ./gradlew test --no-daemon
+                    ./gradlew test --parallel --build-cache
                 '''
             }
             post {
@@ -77,7 +75,7 @@ pipeline {
                 sh '''
                     set -eu
                     if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
-                    ./gradlew test --no-daemon -Pintegration
+                    ./gradlew test --parallel --build-cache -Pintegration
                 '''
             }
             post {
@@ -124,7 +122,7 @@ pipeline {
                                   :services:circleguard-promotion-service:bootJar \\
                                   :services:circleguard-notification-service:bootJar \\
                                   :services:circleguard-gateway-service:bootJar \\
-                                  -x test --no-daemon
+                                  -x test --parallel --build-cache
                                 echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
                                 for svcDir in circleguard-auth-service circleguard-identity-service circleguard-form-service circleguard-promotion-service circleguard-notification-service circleguard-gateway-service
                                 do
@@ -188,7 +186,7 @@ pipeline {
         stage('Smoke E2E') {
             when { environment name: 'E2E_RUN', value: 'true' }
             steps {
-                sh './gradlew :e2e-tests:test --no-daemon'
+                sh './gradlew :e2e-tests:test --parallel --build-cache'
             }
         }
         stage('Release Notes') {
