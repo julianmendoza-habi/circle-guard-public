@@ -5,6 +5,14 @@ plugins {
     kotlin("plugin.spring")
 }
 
+tasks.named<Test>("test") {
+    // Belt-and-suspenders: keep Testcontainers integration specs out of the default `test` task so
+    // Jenkins/agents without Docker never load Redis containers (see root build.gradle.kts).
+    if (!project.hasProperty("integration")) {
+        exclude("com/circleguard/gateway/integration/**")
+    }
+}
+
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
     testImplementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))

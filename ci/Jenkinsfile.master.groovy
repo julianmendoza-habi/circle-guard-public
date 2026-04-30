@@ -48,7 +48,12 @@ pipeline {
         }
         stage('Gradle Unit Tests') {
             steps {
-                sh './gradlew test --no-daemon'
+                sh '''
+                    set -eu
+                    # Jenkins-in-Docker (Linux): point Testcontainers at the mounted host daemon — do not inherit Docker Desktop npipe from Windows.
+                    if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
+                    ./gradlew test --no-daemon
+                '''
             }
             post {
                 always {
@@ -69,7 +74,11 @@ pipeline {
                 DOCKER_HOST = 'unix:///var/run/docker.sock'
             }
             steps {
-                sh './gradlew test --no-daemon -Pintegration'
+                sh '''
+                    set -eu
+                    if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
+                    ./gradlew test --no-daemon -Pintegration
+                '''
             }
             post {
                 always {

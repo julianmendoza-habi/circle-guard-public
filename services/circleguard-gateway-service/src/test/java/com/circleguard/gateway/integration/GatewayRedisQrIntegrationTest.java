@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Integration test: QR validation reads campus access status from Redis (gateway ↔ Redis).
  */
 @SpringBootTest(classes = GatewayServiceApplication.class)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @Tag("integration")
 class GatewayRedisQrIntegrationTest {
 

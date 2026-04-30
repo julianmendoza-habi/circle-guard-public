@@ -62,6 +62,8 @@ services:
     environment:
       # Root's default HOME is /root; kubectl looks at $HOME/.kube/config unless KUBECONFIG is set.
       # docker exec often drops inherited env — keep HOME on Jenkins data dir so kubectl finds the same kubeconfig.
+      # Force the Linux socket inside this container ( Gradle/Testcontainers must not inherit Windows Docker Desktop env from the host ).
+      DOCKER_HOST: unix:///var/run/docker.sock
       HOME: /var/jenkins_home
       TZ: UTC
       KUBECONFIG: /var/jenkins_home/.kube/config
