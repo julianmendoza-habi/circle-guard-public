@@ -186,7 +186,13 @@ pipeline {
                             echo "[ERROR] Rollout failed for ${d} — describe / pods / logs:"
                             kubectl describe "deployment/${d}" -n "${NS}" || true
                             kubectl get pods -n "${NS}" -l "app=${d}" -o wide || true
-                            kubectl logs -n "${NS}" -l "app=${d}" --tail=120 --all-containers=true || true
+                            echo "[INFO] Logs per pod (evita pod viejo en Terminating sin logs):"
+                            kubectl get pods -n "${NS}" -l "app=${d}" -o name | while read -r podpath
+                            do
+                              pname="${podpath#pod/}"
+                              echo "---- ${pname} ----"
+                              kubectl logs -n "${NS}" "${pname}" --tail=120 --all-containers=true 2>&1 || true
+                            done
                             exit 1
                         }
                     done
