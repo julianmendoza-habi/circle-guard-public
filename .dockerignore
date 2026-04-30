@@ -2,7 +2,19 @@
 .github
 .cursor
 .gradle
-**/build
+# Omit bulky Gradle outputs from the image context; keep packaged boot JARs (see docker/Dockerfile.service).
+**/build/classes/**
+**/build/generated/**
+**/build/tmp/**
+**/build/reports/**
+**/build/test-results/**
+**/build/kotlin/**
+**/build/bootScripts/**
+**/build/native/**
+**/build/resources/**
+**/build/intermediates/**
+**/build/plugins/**
+**/build/distributions/**
 **/bin
 mobile/node_modules
 **/.idea

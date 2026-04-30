@@ -105,7 +105,17 @@ pipeline {
                         withEnv(["DOCKER_NS=${ns}"]) {
                             sh '''
                                 set -eu
+                                export DOCKER_BUILDKIT=1
                                 NS="${DOCKER_NS}"
+                                # Single Gradle run packages all boot JARs on the agent (reuses deps from test stage); Docker only layers JRE + JAR (no Gradle inside each image).
+                                ./gradlew \\
+                                  :services:circleguard-auth-service:bootJar \\
+                                  :services:circleguard-identity-service:bootJar \\
+                                  :services:circleguard-form-service:bootJar \\
+                                  :services:circleguard-promotion-service:bootJar \\
+                                  :services:circleguard-notification-service:bootJar \\
+                                  :services:circleguard-gateway-service:bootJar \\
+                                  -x test --no-daemon
                                 echo "${DOCKERHUB_PASSWORD}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
                                 for svcDir in circleguard-auth-service circleguard-identity-service circleguard-form-service circleguard-promotion-service circleguard-notification-service circleguard-gateway-service
                                 do

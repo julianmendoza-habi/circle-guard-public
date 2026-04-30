@@ -28,9 +28,10 @@
 
 ## Docker images
 
-Build from repo root:
+Build from repo root (produce the fat JAR first, then the runtime image):
 
 ```bash
+./gradlew :services:circleguard-auth-service:bootJar -x test --no-daemon
 docker build -f docker/Dockerfile.service --build-arg SERVICE_DIR=circleguard-auth-service -t circleguard/auth-service:dev-latest .
 ```
 
