@@ -77,7 +77,6 @@ pipeline {
                     ]
                     sh '''
                         set -eu
-                        export DOCKER_BUILDKIT=1
                         ./gradlew \\
                           :services:circleguard-auth-service:bootJar \\
                           :services:circleguard-identity-service:bootJar \\
