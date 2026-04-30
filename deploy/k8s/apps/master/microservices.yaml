@@ -39,6 +39,29 @@ spec:
       labels:
         app: circleguard-auth-service
     spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres.circleguard-infra.svc.cluster.local -p 5432 -U admin
+              do
+                echo waiting for postgres
+                sleep 2
+              done
+        - name: wait-for-openldap
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z openldap.circleguard-infra.svc.cluster.local 389
+              do
+                echo waiting for openldap
+                sleep 2
+              done
       containers:
         - name: auth
           image: demitard/auth-service:prod-latest
