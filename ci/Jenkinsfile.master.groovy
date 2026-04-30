@@ -165,9 +165,44 @@ pipeline {
                 echo "[INFO] Manifests use ${params.IMAGE_NAMESPACE ?: 'demitard'}/*:prod-latest — build/push stage debe haber publicado esos tags (o SKIP_DOCKER_BUILD si ya existen)."
                 sh '''
                     set -eu
+                    # Cluster preflight: when k3s runs in Docker (docker-compose.jenkins.yml) and the container is recreated,
+                    # the previous Kubernetes node stays in etcd as NotReady ("ghost"), and any pod bound to it remains there
+                    # because the unreachable taint is NoSchedule (not NoExecute). The Deployment then reports
+                    # `0/1 available` forever and `kubectl rollout status` times out. Below we delete every NotReady node and
+                    # force-evict its orphan pods so the schedulers re-place them on the live node before waiting for rollouts.
+                    echo "[INFO] Pruning ghost (NotReady) Kubernetes nodes (if any)..."
+                    GHOSTS=$(kubectl get nodes --no-headers \
+                        | awk '$2 != "Ready" {print $1}' || true)
+                    if [ -n "${GHOSTS}" ]; then
+                        for n in ${GHOSTS}; do
+                            echo "[INFO] Force-deleting orphan pods on ghost node ${n}"
+                            kubectl get pods --all-namespaces \
+                                --field-selector="spec.nodeName=${n}" \
+                                -o json \
+                                | kubectl delete -f - --ignore-not-found --force --grace-period=0 || true
+                            echo "[INFO] Deleting ghost node ${n}"
+                            kubectl delete node "${n}" --ignore-not-found || true
+                        done
+                    else
+                        echo "[INFO] No ghost nodes detected."
+                    fi
+
                     # Same prerequisite chain as dev: namespaces + infra must exist and be Ready before auth/postgres consumers start.
                     kubectl apply -f deploy/k8s/namespaces.yaml
                     kubectl apply -f deploy/k8s/infra/postgres-redis-neo4j.yaml
+
+                    # If existing infra Deployments still have pods on a (just-deleted) ghost node, the Deployment is "unchanged"
+                    # and rollout status would report 0 available. Force a fresh rollout to reschedule onto the live node.
+                    for d in postgres redis neo4j; do
+                        STUCK=$(kubectl get pods -n circleguard-infra -l "app=${d}" \
+                            -o jsonpath='{range .items[?(@.status.conditions[?(@.type=="Ready")].status=="False")]}{.metadata.name}{"\\n"}{end}' \
+                            | tr -d '[:space:]') || STUCK=""
+                        if [ -n "${STUCK}" ]; then
+                            echo "[INFO] ${d} has not-Ready pod(s); restarting deployment to reschedule."
+                            kubectl rollout restart "deployment/${d}" -n circleguard-infra
+                        fi
+                    done
+
                     kubectl rollout status deployment/postgres -n circleguard-infra --timeout=300s
                     kubectl delete job postgres-ensure-databases -n circleguard-infra --ignore-not-found
                     kubectl apply -f deploy/k8s/infra/postgres-ensure-databases.yaml
