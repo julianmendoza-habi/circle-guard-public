@@ -40,9 +40,17 @@ pipeline {
                     def runIntegration =
                         env.RUN_INTEGRATION_TESTS == 'true' || params.RUN_INTEGRATION_TESTS == true
                     if (!skip && runIntegration) {
-                        sh './gradlew test --no-daemon -Pintegration'
+                        sh '''
+                            set -eu
+                            if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
+                            ./gradlew test --no-daemon -Pintegration
+                        '''
                     } else {
-                        sh './gradlew test --no-daemon'
+                        sh '''
+                            set -eu
+                            if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
+                            ./gradlew test --no-daemon
+                        '''
                     }
                 }
             }

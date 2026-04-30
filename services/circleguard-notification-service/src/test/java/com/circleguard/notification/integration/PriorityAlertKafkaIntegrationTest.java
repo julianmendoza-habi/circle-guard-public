@@ -27,7 +27,7 @@ import static org.awaitility.Awaitility.await;
  * Integration test: Kafka priority alert triggers HTTP fetch to auth-service (notification ↔ auth).
  */
 @SpringBootTest(classes = NotificationApplication.class)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @Tag("integration")
 class PriorityAlertKafkaIntegrationTest {
 
