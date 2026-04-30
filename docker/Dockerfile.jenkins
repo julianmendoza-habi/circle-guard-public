@@ -11,6 +11,19 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && docker --version
 
+# Buildx plugin: required if pipelines use DOCKER_BUILDKIT=1 (docker-cli alone enables BuildKit but needs this binary).
+# Pin release: https://github.com/docker/buildx/releases
+ARG BUILDX_VERSION=v0.33.0
+RUN set -eu \
+    && ARCH="$(uname -m)" \
+    && case "$ARCH" in aarch64 | arm64) BARCH=arm64 ;; *) BARCH=amd64 ;; esac \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -fsSL \
+        "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-${BARCH}" \
+        -o /usr/local/lib/docker/cli-plugins/docker-buildx \
+    && chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx \
+    && docker buildx version
+
 # Pin kubectl to the same minor as bundled k3s in docker-compose.jenkins.yml (skew ±1).
 ARG KUBECTL_VERSION=v1.28.15
 RUN set -eu \

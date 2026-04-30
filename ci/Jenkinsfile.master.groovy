@@ -112,7 +112,6 @@ pipeline {
                         withEnv(["DOCKER_NS=${ns}"]) {
                             sh '''
                                 set -eu
-                                export DOCKER_BUILDKIT=1
                                 NS="${DOCKER_NS}"
                                 # Single Gradle run packages all boot JARs on the agent (reuses deps from test stage); Docker only layers JRE + JAR (no Gradle inside each image).
                                 ./gradlew \\
