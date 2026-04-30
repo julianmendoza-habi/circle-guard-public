@@ -1,30 +1,13 @@
 /**
- * Stage pipeline: Gradle tests, deploy stage namespace, optional Locust performance report.
+ * Stage pipeline: Gradle tests, deploy stage namespace, Locust performance report, and E2E smoke tests.
  *
- * Integration (-Pintegration) only when RUN_INTEGRATION_TESTS is true (parameter or env).
- * The Kubernetes deploy and Locust stages detect their CLIs (`kubectl`, `locust`/`pip`) and skip
- * gracefully if not present on the agent (instead of breaking the build).
+ * Integration, deploy, Locust, and E2E stages are mandatory. The Jenkins agent must provide Docker,
+ * kubectl, Python/pip, and the E2E_* URLs required by the smoke tests.
  */
 pipeline {
     agent any
-    parameters {
-        booleanParam(
-            name: 'RUN_INTEGRATION_TESTS',
-            defaultValue: false,
-            description: 'Run Gradle -Pintegration (Testcontainers; requires Docker on the agent)',
-        )
-        booleanParam(
-            name: 'SKIP_K8S_DEPLOY',
-            defaultValue: false,
-            description: 'Saltar despliegue Kubernetes (útil si el agente no tiene kubectl o cluster)',
-        )
-        booleanParam(
-            name: 'SKIP_LOCUST',
-            defaultValue: false,
-            description: 'Saltar el stage de Locust (útil si el agente no tiene Python/pip)',
-        )
-    }
     environment {
+        IMAGE_NAMESPACE = 'circleguard'
         LOCUST_USERS = '20'
         LOCUST_SPAWN_RATE = '2'
         LOCUST_RUN_TIME = '2m'
@@ -35,23 +18,11 @@ pipeline {
         }
         stage('Gradle Tests (with integration)') {
             steps {
-                script {
-                    def skip = env.SKIP_INTEGRATION_TESTS == 'true'
-                    def runIntegration =
-                        env.RUN_INTEGRATION_TESTS == 'true' || params.RUN_INTEGRATION_TESTS == true
-                    if (!skip && runIntegration) {
-                        sh '''
-                            set -eu
-                            if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
-                            ./gradlew test --parallel --build-cache -Pintegration
-                        '''
-                    } else {
-                        sh '''
-                            set -eu
-                            ./gradlew test --parallel --build-cache
-                        '''
-                    }
-                }
+                sh '''
+                    set -eu
+                    if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
+                    ./gradlew test --parallel --build-cache -Pintegration
+                '''
             }
             post {
                 always {
@@ -59,60 +30,59 @@ pipeline {
                 }
             }
         }
-        stage('Docker Build & Push (stage tag)') {
+        stage('Docker Build (stage-latest)') {
             steps {
-                echo 'Build/push stage images (reuse docker/Dockerfile.service with stage tags).'
+                sh '''
+                    set -eu
+                    command -v docker >/dev/null 2>&1
+                    ./gradlew \\
+                      :services:circleguard-auth-service:bootJar \\
+                      :services:circleguard-identity-service:bootJar \\
+                      :services:circleguard-form-service:bootJar \\
+                      :services:circleguard-promotion-service:bootJar \\
+                      :services:circleguard-notification-service:bootJar \\
+                      :services:circleguard-gateway-service:bootJar \\
+                      -x test --parallel --build-cache
+                    for svcDir in circleguard-auth-service circleguard-identity-service circleguard-form-service circleguard-promotion-service circleguard-notification-service circleguard-gateway-service
+                    do
+                        SHORT="${svcDir#circleguard-}"
+                        docker build -f docker/Dockerfile.service --build-arg "SERVICE_DIR=${svcDir}" -t "${IMAGE_NAMESPACE}/${SHORT}:stage-latest" .
+                    done
+                '''
             }
         }
         stage('Deploy Kubernetes (stage)') {
-            when {
-                expression {
-                    if (params.SKIP_K8S_DEPLOY == true || env.SKIP_K8S_DEPLOY == 'true') {
-                        echo 'Stage saltado por SKIP_K8S_DEPLOY=true.'
-                        return false
-                    }
-                    def hasKubectl = sh(script: 'command -v kubectl >/dev/null 2>&1', returnStatus: true) == 0
-                    if (!hasKubectl) {
-                        echo '[WARN] `kubectl` no disponible en el agente Jenkins. Stage omitido. ' +
-                            'Instala kubectl o usa la imagen `docker/Dockerfile.jenkins`. ' +
-                            'Para silenciar este aviso, marca SKIP_K8S_DEPLOY=true.'
-                        return false
-                    }
-                    def clusterOk = sh(script: 'kubectl get --raw=/version >/dev/null 2>&1', returnStatus: true) == 0
-                    if (!clusterOk) {
-                        echo '[WARN] kubectl está instalado pero la API del cluster no responde (kubeconfig incorrecto, ' +
-                            'proxy o página de login en lugar del servidor Kubernetes). Stage omitido. ' +
-                            'Corrige KUBECONFIG o marca SKIP_K8S_DEPLOY=true.'
-                    }
-                    return clusterOk
-                }
-            }
             steps {
-                sh 'kubectl apply -f deploy/k8s/apps/stage/microservices.yaml'
+                sh '''
+                    set -eu
+                    K3S_CTR="${K3S_CONTAINER_NAME:-circleguard-k3s}"
+                    IMGS="auth-service identity-service form-service promotion-service notification-service gateway-service"
+                    if docker inspect "$K3S_CTR" >/dev/null 2>&1; then
+                        echo "[INFO] Loading circleguard/*:stage-latest into k3s (${K3S_CTR}) via ctr import..."
+                        for img in $IMGS; do
+                            docker save "circleguard/${img}:stage-latest" | docker exec -i "$K3S_CTR" ctr -n k8s.io images import -
+                        done
+                    else
+                        echo "[INFO] No local k3s container (${K3S_CTR}); cluster must pull stage-latest from a registry."
+                    fi
+                '''
+                sh '''
+                    set -eu
+                    command -v kubectl >/dev/null 2>&1
+                    kubectl get --raw=/version >/dev/null
+                    kubectl apply -f deploy/k8s/apps/stage/microservices.yaml
+                '''
             }
         }
         stage('Locust (stage ingress)') {
-            when {
-                expression {
-                    if (params.SKIP_LOCUST == true || env.SKIP_LOCUST == 'true') {
-                        echo 'Stage saltado por SKIP_LOCUST=true.'
-                        return false
-                    }
-                    def hasPip = sh(script: 'command -v pip >/dev/null 2>&1 || command -v pip3 >/dev/null 2>&1', returnStatus: true) == 0
-                    if (!hasPip) {
-                        echo '[WARN] `pip`/`pip3` no disponible en el agente Jenkins. Stage Locust omitido. ' +
-                            'Para silenciar este aviso, marca SKIP_LOCUST=true.'
-                    }
-                    return hasPip
-                }
-            }
             steps {
                 sh '''
+                    set -eu
                     PIP_BIN=$(command -v pip || command -v pip3)
                     "$PIP_BIN" install -r tests/performance/requirements-locust.txt
                     locust -f tests/performance/locustfile.py \
                       --headless -u ${LOCUST_USERS} -r ${LOCUST_SPAWN_RATE} --run-time ${LOCUST_RUN_TIME} \
-                      --html build/locust-report-stage.html --csv build/locust-stage || true
+                      --html build/locust-report-stage.html --csv build/locust-stage
                 '''
             }
             post {
@@ -121,9 +91,11 @@ pipeline {
                 }
             }
         }
-        stage('E2E (optional)') {
+        stage('E2E Smoke') {
             steps {
-                echo 'Set E2E_* URLs and E2E_RUN=true in Jenkins job environment for :e2e-tests:test'
+                withEnv(['E2E_RUN=true']) {
+                    sh './gradlew :e2e-tests:test --parallel --build-cache'
+                }
             }
         }
     }
