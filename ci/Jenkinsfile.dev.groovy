@@ -148,6 +148,9 @@ pipeline {
                     kubectl apply -f deploy/k8s/infra/postgres-redis-neo4j.yaml
                     # Gateway needs Redis; promotion needs Postgres/Neo4j — wait infra before app pods start racing ImagePull + JVM.
                     kubectl rollout status deployment/postgres -n circleguard-infra --timeout=300s
+                    kubectl delete job postgres-ensure-databases -n circleguard-infra --ignore-not-found
+                    kubectl apply -f deploy/k8s/infra/postgres-ensure-databases.yaml
+                    kubectl wait --for=condition=complete job/postgres-ensure-databases -n circleguard-infra --timeout=180s
                     kubectl rollout status deployment/redis -n circleguard-infra --timeout=300s
                     kubectl rollout status deployment/neo4j -n circleguard-infra --timeout=300s
                     kubectl apply -f deploy/k8s/infra/kafka-zookeeper.yaml

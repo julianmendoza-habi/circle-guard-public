@@ -32,6 +32,7 @@ RUN set -eu \
     && curl -fsSL -o /usr/local/bin/kubectl \
         "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${KARCH}/kubectl" \
     && chmod +x /usr/local/bin/kubectl
+# Si en k3s `kubectl logs` responde NotFound, ver logs en containerd: docker exec <k3s> crictl logs <id>
 
 COPY docker/jenkins-kubeconfig-init.sh /usr/local/bin/jenkins-kubeconfig-init.sh
 RUN chmod +x /usr/local/bin/jenkins-kubeconfig-init.sh \
