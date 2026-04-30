@@ -326,6 +326,18 @@ spec:
       labels:
         app: circleguard-gateway-service
     spec:
+      initContainers:
+        - name: wait-for-redis
+          image: redis:7.2-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h redis.circleguard-infra.svc.cluster.local ping | grep -q PONG
+              do
+                echo waiting for redis
+                sleep 2
+              done
       containers:
         - name: gateway
           image: demitard/gateway-service:prod-latest
