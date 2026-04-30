@@ -142,12 +142,27 @@ pipeline {
                         echo "[INFO] No local k3s container (${K3S_CTR}) or no Docker — cluster must pull dev-latest from a registry."
                     fi
                 '''
-                sh 'kubectl apply -f deploy/k8s/namespaces.yaml'
-                sh 'kubectl apply -f deploy/k8s/infra/postgres-redis-neo4j.yaml'
-                sh 'kubectl apply -f deploy/k8s/infra/kafka-zookeeper.yaml'
-                sh 'kubectl apply -f deploy/k8s/infra/openldap.yaml'
-                sh 'kubectl apply -f deploy/k8s/apps/dev/microservices.yaml'
-                sh 'kubectl rollout status deployment/circleguard-gateway-service -n circleguard-dev --timeout=180s'
+                sh '''
+                    set -eu
+                    kubectl apply -f deploy/k8s/namespaces.yaml
+                    kubectl apply -f deploy/k8s/infra/postgres-redis-neo4j.yaml
+                    # Gateway needs Redis; promotion needs Postgres/Neo4j — wait infra before app pods start racing ImagePull + JVM.
+                    kubectl rollout status deployment/postgres -n circleguard-infra --timeout=300s
+                    kubectl rollout status deployment/redis -n circleguard-infra --timeout=300s
+                    kubectl rollout status deployment/neo4j -n circleguard-infra --timeout=300s
+                    kubectl apply -f deploy/k8s/infra/kafka-zookeeper.yaml
+                    kubectl rollout status deployment/zookeeper -n circleguard-infra --timeout=300s
+                    kubectl rollout status deployment/kafka -n circleguard-infra --timeout=300s
+                    kubectl apply -f deploy/k8s/infra/openldap.yaml
+                    kubectl rollout status deployment/openldap -n circleguard-infra --timeout=300s
+                    kubectl apply -f deploy/k8s/apps/dev/microservices.yaml
+                    TIMEOUT=600s
+                    for d in circleguard-auth-service circleguard-identity-service circleguard-form-service circleguard-promotion-service circleguard-notification-service circleguard-gateway-service
+                    do
+                        echo "[INFO] kubectl rollout status deployment/${d} -n circleguard-dev --timeout=${TIMEOUT}"
+                        kubectl rollout status "deployment/${d}" -n circleguard-dev --timeout="${TIMEOUT}"
+                    done
+                '''
             }
         }
     }
