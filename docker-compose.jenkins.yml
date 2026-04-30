@@ -25,12 +25,21 @@ services:
   k3s:
     image: rancher/k3s:v1.28.15-k3s1
     container_name: circleguard-k3s
+    # Pin hostname and --node-name so k3s always registers as the SAME Kubernetes node across
+    # container recreations. Without this, Docker assigns a fresh container-id hostname on every
+    # recreate (rebuild, Docker Desktop restart, `compose up` with changes) and k3s registers a
+    # brand-new node, leaving the previous one as an unreachable "ghost" in etcd. Pods bound to
+    # the ghost node stay forever (taint is NoSchedule, not NoExecute) and `kubectl rollout
+    # status` for postgres/kafka/etc. times out with `0 of 1 updated replicas are available`.
+    hostname: circleguard-k3s
+    restart: unless-stopped
     privileged: true
     command:
       - server
       - --tls-san=k3s
       - --tls-san=127.0.0.1
       - --disable=traefik
+      - --node-name=circleguard-k3s
     environment:
       K3S_TOKEN: circleguard-local-dev
     volumes:
