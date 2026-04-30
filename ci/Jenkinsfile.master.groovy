@@ -130,6 +130,7 @@ pipeline {
                                     docker build -f docker/Dockerfile.service --build-arg "SERVICE_DIR=${svcDir}" -t "${NS}/${SHORT}:prod-latest" .
                                     docker push "${NS}/${SHORT}:prod-latest"
                                 done
+                                echo "[INFO] Si Docker Desktop muestra contenedores detenidos con nombre aleatorio tras el build, suelen ser restos de BuildKit; puedes borrarlos con: docker container prune -f"
                             '''
                         }
                     }
@@ -162,12 +163,22 @@ pipeline {
             }
             steps {
                 echo "[INFO] Manifests use ${params.IMAGE_NAMESPACE ?: 'demitard'}/*:prod-latest — build/push stage debe haber publicado esos tags (o SKIP_DOCKER_BUILD si ya existen)."
-                sh 'kubectl apply -f deploy/k8s/apps/master/microservices.yaml'
                 sh '''
                     set -eu
+                    # Same prerequisite chain as dev: namespaces + infra must exist and be Ready before auth/postgres consumers start.
+                    kubectl apply -f deploy/k8s/namespaces.yaml
+                    kubectl apply -f deploy/k8s/infra/postgres-redis-neo4j.yaml
+                    kubectl rollout status deployment/postgres -n circleguard-infra --timeout=300s
+                    kubectl rollout status deployment/redis -n circleguard-infra --timeout=300s
+                    kubectl rollout status deployment/neo4j -n circleguard-infra --timeout=300s
+                    kubectl apply -f deploy/k8s/infra/kafka-zookeeper.yaml
+                    kubectl rollout status deployment/zookeeper -n circleguard-infra --timeout=300s
+                    kubectl rollout status deployment/kafka -n circleguard-infra --timeout=300s
+                    kubectl apply -f deploy/k8s/infra/openldap.yaml
+                    kubectl rollout status deployment/openldap -n circleguard-infra --timeout=300s
+                    kubectl apply -f deploy/k8s/apps/master/microservices.yaml
                     NS=circleguard-master
                     TIMEOUT=600s
-                    # Backends first, then gateway (Redis/routes); generous timeout for image pull + JVM.
                     for d in circleguard-auth-service circleguard-identity-service circleguard-form-service circleguard-promotion-service circleguard-notification-service circleguard-gateway-service
                     do
                         echo "[INFO] kubectl rollout status deployment/${d} -n ${NS} --timeout=${TIMEOUT}"
