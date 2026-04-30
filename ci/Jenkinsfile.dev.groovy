@@ -72,6 +72,18 @@ pipeline {
                         'circleguard-notification-service',
                         'circleguard-gateway-service'
                     ]
+                    sh '''
+                        set -eu
+                        export DOCKER_BUILDKIT=1
+                        ./gradlew \\
+                          :services:circleguard-auth-service:bootJar \\
+                          :services:circleguard-identity-service:bootJar \\
+                          :services:circleguard-form-service:bootJar \\
+                          :services:circleguard-promotion-service:bootJar \\
+                          :services:circleguard-notification-service:bootJar \\
+                          :services:circleguard-gateway-service:bootJar \\
+                          -x test --no-daemon
+                    '''
                     svcs.each { svcDir ->
                         def shortName = svcDir.replaceFirst(/^circleguard-/, '')
                         sh """
