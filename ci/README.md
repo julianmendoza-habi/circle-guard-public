@@ -28,8 +28,8 @@ Declarative pipeline definitions live alongside the code:
 | File | Purpose |
 |------|---------|
 | [`Jenkinsfile.dev.groovy`](Jenkinsfile.dev.groovy) | Dev: Gradle tests, Docker builds, deploy `circleguard-dev` |
-| [`Jenkinsfile.stage.groovy`](Jenkinsfile.stage.groovy) | Stage: tests (integration opcional), deploy `circleguard-stage`, Locust HTML/CSV |
-| [`Jenkinsfile.master.groovy`](Jenkinsfile.master.groovy) | Master: tests (integration opcional), deploy `circleguard-master`, optional E2E, release notes |
+| [`Jenkinsfile.stage.groovy`](Jenkinsfile.stage.groovy) | Stage: tests with integration, deploy `circleguard-stage`, Locust HTML/CSV, E2E smoke |
+| [`Jenkinsfile.master.groovy`](Jenkinsfile.master.groovy) | Master: tests with integration, Docker build/push, deploy `circleguard-master`, E2E smoke, release notes |
 
 ---
 
@@ -38,8 +38,8 @@ Declarative pipeline definitions live alongside the code:
 ### Prerrequisitos en el agente Jenkins
 
 - **JDK 21** y **`./gradlew`** ejecutable (Linux agent típico).
-- **Docker** (para los stages que construyen imágenes).
-- **Testcontainers (`-Pintegration`):** por defecto **no** se ejecutan en Jenkins (evita `DockerClientProviderStrategy` cuando el agente no puede usar Docker). Para activarlas: en el job marca **This project is parameterized** y el booleano **`RUN_INTEGRATION_TESTS`**, o define la variable de entorno `RUN_INTEGRATION_TESTS=true`. Necesitas Docker usable desde el agente (p. ej. [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml) con `/var/run/docker.sock` y permisos; opción `user: "0:0"` o `group_add` + GID del grupo `docker` del host). Para forzar omisión aunque `RUN_INTEGRATION_TESTS` esté en true: `SKIP_INTEGRATION_TESTS=true`.
+- **Docker** (para construir imágenes y ejecutar Testcontainers con `-Pintegration`).
+- **Testcontainers (`-Pintegration`):** se ejecutan siempre en stage/master. Necesitas Docker usable desde el agente (p. ej. [`docker-compose.jenkins.yml`](../docker-compose.jenkins.yml) con `/var/run/docker.sock` y permisos; opción `user: "0:0"` o `group_add` + GID del grupo `docker` del host).
 - **`kubectl`** con contexto apuntando a tu cluster (Minikube, Kind, EKS, etc.).
 - Plugins recomendados: **Pipeline**, **Git**, **JUnit**, **Credentials Binding**, **Pipeline: Stage View** o **Blue Ocean** (opcional).
 
@@ -72,15 +72,14 @@ Repite con otro nombre y **Script Path:**
 - `ci/Jenkinsfile.stage.groovy` → job `circle-guard-stage`
 - `ci/Jenkinsfile.master.groovy` → job `circle-guard-master`
 
-### Parámetros del pipeline (master y stage)
+### Parámetros del pipeline
 
-La primera vez que Jenkins carga el Groovy desde SCM, registra los parámetros del pipeline. En **master**: `RELEASE_VERSION` (string) y **`RUN_INTEGRATION_TESTS`** (boolean, por defecto **false**). En **stage**: **`RUN_INTEGRATION_TESTS`** (boolean, por defecto **false**). Con el valor por defecto, Gradle corre **sin** `-Pintegration`, así el build no depende de Testcontainers/Docker en el agente.
+La primera vez que Jenkins carga el Groovy desde SCM, registra los parámetros del pipeline. En **master** se mantienen `RELEASE_VERSION`, `IMAGE_NAMESPACE` y `DOCKERHUB_CREDENTIALS_ID`. Los parámetros para saltar integración, build o deploy fueron eliminados: esas etapas son obligatorias.
 
 - `RELEASE_VERSION` (solo master): usado en release notes.
 
-Variables de entorno para E2E (si activas el stage): en el job → **Build Environment** → inject:
+Variables de entorno para E2E: en el job → **Build Environment** → inject:
 
-- `E2E_RUN=true`
 - `E2E_AUTH_URL`, `E2E_GATEWAY_URL`, `E2E_FORM_URL`, `E2E_PROMOTION_URL`, `E2E_IDENTITY_URL` (URLs del ingress o port-forward).
 
 ### Si falla por `credentials('docker-registry-url')`
@@ -126,20 +125,15 @@ El agente Jenkins no tiene la **CLI de Docker**. Soluciones:
    docker compose -f docker-compose.jenkins.yml build --no-cache
    docker compose -f docker-compose.jenkins.yml up -d
    ```
-2. Si solo quieres validar tests/lint sin construir imágenes, marca el parámetro **`SKIP_DOCKER_BUILD=true`** del job (o env var `SKIP_DOCKER_BUILD=true`). El stage se omite con un aviso, **sin** romper la pipeline.
-3. El pipeline **detecta automáticamente** si `docker` no está disponible y omite el stage con `[WARN]`. La pipeline sigue verde para que los demás stages se ejecuten.
+2. Verifica que el socket de Docker esté montado y que el usuario del agente tenga permisos para usarlo.
+3. Si `docker` no está disponible, la pipeline falla porque el build de imágenes es obligatorio.
 
 ### `kubectl: command not found` o cluster no accesible
 
-Aplica el mismo principio: el pipeline detecta `kubectl` y omite el deploy si falta. Para forzarlo, marca **`SKIP_K8S_DEPLOY=true`**.
+Instala `kubectl`, configura `KUBECONFIG` y verifica que `kubectl get --raw=/version` responda desde el agente. Si `kubectl` o el cluster no están disponibles, la pipeline falla porque el deploy es obligatorio.
 
 ### `LocalUserRepositoryJdbcIntegrationTest > initializationError` con `DockerClientProviderStrategy`
 
 Esto ocurre cuando las pruebas de integración (Testcontainers) se ejecutan sin Docker disponible. La build de Gradle ahora **excluye a nivel de archivo** las clases de integración cuando no se pasa `-Pintegration` (mira `build.gradle.kts`), porque el filtro por tag de JUnit Platform corre **después** de cargar la clase y los campos `@Container static` ya intentan resolver el cliente Docker.
 
-Si necesitas correr tests de integración en Jenkins:
-
-- Asegura Docker en el agente (socket montado, ver `docker-compose.jenkins.yml`).
-- Marca **`RUN_INTEGRATION_TESTS=true`** en master/stage.
-
-Para forzar omisión incluso si `RUN_INTEGRATION_TESTS=true`: define `SKIP_INTEGRATION_TESTS=true` en el entorno del job.
+Los tests de integración corren siempre en stage/master; asegura Docker en el agente (socket montado, ver `docker-compose.jenkins.yml`).
