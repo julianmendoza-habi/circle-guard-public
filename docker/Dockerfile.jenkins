@@ -7,9 +7,13 @@ USER root
 # Client only (talks to the host daemon via /var/run/docker.sock). On Debian 13+ `docker.io` no longer
 # pulls the CLI when using --no-install-recommends — the `docker` binary is in package `docker-cli`.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends docker-cli ca-certificates curl \
+    && apt-get install -y --no-install-recommends \
+        docker-cli ca-certificates curl \
+        python3 python3-pip python3-venv \
     && rm -rf /var/lib/apt/lists/* \
-    && docker --version
+    && docker --version \
+    && python3 --version \
+    && python3 -m pip --version
 
 # Buildx plugin: required if pipelines use DOCKER_BUILDKIT=1 (docker-cli alone enables BuildKit but needs this binary).
 # Pin release: https://github.com/docker/buildx/releases
