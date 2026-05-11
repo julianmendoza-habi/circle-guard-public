@@ -84,9 +84,13 @@ pipeline {
                         exit 127
                     fi
                     VENV="${WORKSPACE}/.jenkins-locust-venv"
+                    export PIP_CACHE_DIR="${WORKSPACE}/.pip-cache"
+                    mkdir -p build "${PIP_CACHE_DIR}"
                     python3 -m venv "${VENV}"
                     "${VENV}/bin/pip" install -r tests/performance/requirements-locust.txt
-                    "${VENV}/bin/locust" -f tests/performance/locustfile.py \
+                    chmod +x scripts/ci/run-locust-with-kube-port-forward.sh
+                    bash scripts/ci/run-locust-with-kube-port-forward.sh circleguard-stage \
+                      "${VENV}/bin/locust" -f tests/performance/locustfile.py \
                       --headless -u ${LOCUST_USERS} -r ${LOCUST_SPAWN_RATE} --run-time ${LOCUST_RUN_TIME} \
                       --html build/locust-report-stage.html --csv build/locust-stage
                 '''
