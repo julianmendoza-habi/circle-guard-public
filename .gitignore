@@ -49,3 +49,4 @@ neo4jdata/
 
 # Jenkins pipeline (Locust stage venv in workspace)
 .jenkins-locust-venv/
+.pip-cache/
