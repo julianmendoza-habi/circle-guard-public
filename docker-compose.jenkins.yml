@@ -19,6 +19,10 @@
 # Pipeline dev (ci/Jenkinsfile.dev.groovy): si el job Jenkins corre en este host con acceso Docker,
 # el stage de deploy puede importar imágenes `circleguard/*:dev-latest` al containerd de k3s usando el
 # contenedor `circleguard-k3s`. Para otro nombre: variable de entorno del job `K3S_CONTAINER_NAME`.
+#
+# E2E (master/stage): no hace falta definir E2E_* en Jenkins. El pipeline ejecuta
+# scripts/ci/run-e2e-with-kube-port-forward.sh dentro del contenedor jenkins: abre túneles a los Services
+# del namespace y llama a los microservicios en 127.0.0.1:18080–18088 (no usa el puerto 8080 de la UI).
 
 services:
   # Keep in sync with kubectl ARG KUBECTL_VERSION in docker/Dockerfile.jenkins (same Kubernetes minor).

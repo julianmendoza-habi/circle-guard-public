@@ -2,11 +2,14 @@
  * Master/prod pipeline: gates on tests, deploy prod namespace, smoke E2E, Release Notes artifact.
  *
  * Integration, Docker build/push, Kubernetes deploy, and smoke E2E stages are mandatory. The Jenkins
- * agent must provide Docker, kubectl, a reachable Kubernetes API, and the E2E_* URLs required by tests.
+ * agent must provide Docker, kubectl, and a reachable Kubernetes API (docker-compose.jenkins.yml).
  *
  * Docker Hub: master expects images `${IMAGE_NAMESPACE}/*:prod-latest` (default namespace `demitard`).
  * Jenkins credential `dockerhub-credentials` (Kind: Username with password): usuario Docker Hub + contraseña o Access Token.
  * Override ID with parameter DOCKERHUB_CREDENTIALS_ID if needed.
+ *
+ * Smoke E2E: `scripts/ci/run-e2e-with-kube-port-forward.sh` opens kubectl port-forward to the cluster
+ * Services and sets E2E_* to http://127.0.0.1:18080–18088 inside the agent (no job parameters required).
  */
 pipeline {
     agent any
@@ -180,9 +183,11 @@ pipeline {
         }
         stage('Smoke E2E') {
             steps {
-                withEnv(['E2E_RUN=true']) {
-                    sh './gradlew :e2e-tests:test --parallel --build-cache'
-                }
+                sh '''
+                    set -eu
+                    chmod +x scripts/ci/run-e2e-with-kube-port-forward.sh
+                    bash scripts/ci/run-e2e-with-kube-port-forward.sh circleguard-master
+                '''
             }
         }
         stage('Release Notes') {
