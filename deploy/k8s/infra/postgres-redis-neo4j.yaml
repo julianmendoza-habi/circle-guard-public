@@ -128,6 +128,9 @@ spec:
       labels:
         app: neo4j
     spec:
+      # Neo4j treats every NEO4J_* env as config. Default service links inject NEO4J_PORT_* from the
+      # Service named "neo4j", which breaks startup (e.g. "Unrecognized setting ... PORT.7687.TCP.PORT").
+      enableServiceLinks: false
       containers:
         - name: neo4j
           image: neo4j:5.26
