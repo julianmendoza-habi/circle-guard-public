@@ -4,7 +4,6 @@ Set environment variables (or host in UI):
   TARGET_FORM, TARGET_GATEWAY, TARGET_PROMOTION, TARGET_AUTH
 """
 import os
-import random
 import uuid
 
 from locust import HttpUser, between, task
@@ -15,6 +14,9 @@ def _env(name: str, default: str) -> str:
 
 
 class CircleGuardUser(HttpUser):
+    # Locust 2.x requires a base host even when every task uses absolute URLs (TARGET_* below).
+    host = "http://127.0.0.1"
+
     wait_time = between(1, 3)
 
     def on_start(self) -> None:
