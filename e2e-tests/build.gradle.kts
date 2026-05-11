@@ -14,6 +14,8 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Avoid parallel forks so RestAssured + port-forwards see a single sequential client (less flaky).
+    maxParallelForks = 1
     systemProperty("E2E_AUTH_URL", System.getenv("E2E_AUTH_URL") ?: "")
     systemProperty("E2E_GATEWAY_URL", System.getenv("E2E_GATEWAY_URL") ?: "")
     systemProperty("E2E_FORM_URL", System.getenv("E2E_FORM_URL") ?: "")
