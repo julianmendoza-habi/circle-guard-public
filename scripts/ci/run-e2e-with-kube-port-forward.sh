@@ -70,14 +70,23 @@ wait_tcp 18087 gateway
 wait_tcp 18088 promotion
 
 # TCP "open" only means the forwarder is listening; the pod may still be starting (promotion + Neo4j is often last).
+# Curl prints "000" and exits non-zero on connection failure; do not append a second "000".
 http_code() {
-  curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 25 "$@" 2>/dev/null || echo "000"
+  local out
+  out=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 25 "$@" 2>/dev/null || true)
+  if [[ -z "${out}" || "${out}" == "000" ]]; then
+    echo "000"
+  else
+    echo "${out}"
+  fi
 }
 
 echo "[INFO] HTTP warm-up through port-forwards (retries until backends respond)..."
 warm_ok=0
 for i in $(seq 1 90); do
-  c_auth=$(http_code -X POST "http://127.0.0.1:18080/api/v1/auth/visitor/handoff" -H "Content-Type: application/json" -d "{\"anonymousId\":\"pf-warm-$i\"}")
+  # Auth visitor/handoff requires a valid UUID (see LoginController.generateVisitorHandoff).
+  aid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || python3 -c "import uuid; print(uuid.uuid4())")
+  c_auth=$(http_code -X POST "http://127.0.0.1:18080/api/v1/auth/visitor/handoff" -H "Content-Type: application/json" -d "{\"anonymousId\":\"${aid}\"}")
   c_id=$(http_code -X POST "http://127.0.0.1:18081/api/v1/identities/map" -H "Content-Type: application/json" -d "{\"realIdentity\":\"pf-warm-$i\"}")
   c_form=$(http_code "http://127.0.0.1:18086/api/v1/questionnaires/active")
   c_prom=$(http_code "http://127.0.0.1:18088/api/v1/buildings")
