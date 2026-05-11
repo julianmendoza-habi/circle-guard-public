@@ -218,12 +218,12 @@ spec:
                 sleep 2
               done
         - name: wait-for-neo4j
-          image: neo4j:5.26
+          image: busybox:1.36
           command:
             - sh
             - -c
             - |
-              until cypher-shell -a bolt://neo4j.circleguard-infra.svc.cluster.local:7687 -u neo4j -p password "RETURN 1" >/dev/null 2>&1
+              until nc -z neo4j.circleguard-infra.svc.cluster.local 7687
               do
                 echo waiting for neo4j
                 sleep 2

@@ -128,6 +128,9 @@ spec:
       labels:
         app: neo4j
     spec:
+      # Neo4j treats every NEO4J_* env as config. Default service links inject NEO4J_PORT_* from the
+      # Service named "neo4j", which breaks startup (e.g. "Unrecognized setting ... PORT.7687.TCP.PORT").
+      enableServiceLinks: false
       containers:
         - name: neo4j
           image: neo4j:5.26
@@ -137,6 +140,19 @@ spec:
           env:
             - name: NEO4J_AUTH
               value: neo4j/password
+            # Clients connect via the Service DNS name; Bolt must advertise the same host or
+            # cypher-shell / drivers fail the handshake after TCP connect.
+            - name: NEO4J_server_http_advertised__address
+              value: neo4j.circleguard-infra.svc.cluster.local:7474
+            - name: NEO4J_server_bolt_advertised__address
+              value: neo4j.circleguard-infra.svc.cluster.local:7687
+          readinessProbe:
+            tcpSocket:
+              port: 7687
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 24
 ---
 apiVersion: v1
 kind: Service
