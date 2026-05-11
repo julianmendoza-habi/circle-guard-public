@@ -78,9 +78,15 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    PIP_BIN=$(command -v pip || command -v pip3)
-                    "$PIP_BIN" install -r tests/performance/requirements-locust.txt
-                    locust -f tests/performance/locustfile.py \
+                    mkdir -p build
+                    if ! command -v python3 >/dev/null 2>&1; then
+                        echo "[ERROR] python3 not found. Rebuild Jenkins image (includes python3-pip): docker compose -f docker-compose.jenkins.yml build --no-cache" >&2
+                        exit 127
+                    fi
+                    VENV="${WORKSPACE}/.jenkins-locust-venv"
+                    python3 -m venv "${VENV}"
+                    "${VENV}/bin/pip" install -r tests/performance/requirements-locust.txt
+                    "${VENV}/bin/locust" -f tests/performance/locustfile.py \
                       --headless -u ${LOCUST_USERS} -r ${LOCUST_SPAWN_RATE} --run-time ${LOCUST_RUN_TIME} \
                       --html build/locust-report-stage.html --csv build/locust-stage
                 '''
