@@ -1,8 +1,8 @@
 /**
  * Stage pipeline: Gradle tests, deploy stage namespace, Locust performance report, and E2E smoke tests.
  *
- * Integration, deploy, Locust, and E2E stages are mandatory. The Jenkins agent must provide Docker,
- * kubectl, Python/pip, and the E2E_* URLs required by the smoke tests.
+ * Integration, deploy, Locust, and E2E stages are mandatory. E2E uses kubectl port-forward (see
+ * scripts/ci/run-e2e-with-kube-port-forward.sh) — no E2E_* job parameters.
  */
 pipeline {
     agent any
@@ -93,9 +93,11 @@ pipeline {
         }
         stage('E2E Smoke') {
             steps {
-                withEnv(['E2E_RUN=true']) {
-                    sh './gradlew :e2e-tests:test --parallel --build-cache'
-                }
+                sh '''
+                    set -eu
+                    chmod +x scripts/ci/run-e2e-with-kube-port-forward.sh
+                    bash scripts/ci/run-e2e-with-kube-port-forward.sh circleguard-stage
+                '''
             }
         }
     }
