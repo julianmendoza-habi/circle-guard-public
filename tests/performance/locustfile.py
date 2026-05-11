@@ -27,9 +27,16 @@ class CircleGuardUser(HttpUser):
 
     @task(3)
     def get_active_questionnaire(self) -> None:
-        self.client.get(
-            f"{self.form_base}/api/v1/questionnaires/active", name="/form/questionnaires/active"
-        )
+        # Form service returns 404 when no questionnaire is active (valid empty state in stage).
+        with self.client.get(
+            f"{self.form_base}/api/v1/questionnaires/active",
+            name="/form/questionnaires/active",
+            catch_response=True,
+        ) as response:
+            if response.status_code in (200, 404):
+                response.success()
+            else:
+                response.failure(f"Unexpected status {response.status_code}")
 
     @task(2)
     def list_buildings(self) -> None:
