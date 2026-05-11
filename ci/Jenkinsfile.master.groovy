@@ -138,11 +138,16 @@ pipeline {
                     # If existing infra Deployments still have pods on a (just-deleted) ghost node, the Deployment is "unchanged"
                     # and rollout status would report 0 available. Force a fresh rollout to reschedule onto the live node.
                     for d in postgres redis neo4j; do
-                        STUCK=$(kubectl get pods -n circleguard-infra -l "app=${d}" \
-                            -o jsonpath='{range .items[?(@.status.conditions[?(@.type=="Ready")].status=="False")]}{.metadata.name}{"\\n"}{end}' \
-                            | tr -d '[:space:]') || STUCK=""
+                        STUCK=""
+                        for pod in $(kubectl get pods -n circleguard-infra -l "app=${d}" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+                            r=$(kubectl get pod -n circleguard-infra "${pod}" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)
+                            if [ "${r}" != "True" ]; then
+                                STUCK="${pod}"
+                                break
+                            fi
+                        done
                         if [ -n "${STUCK}" ]; then
-                            echo "[INFO] ${d} has not-Ready pod(s); restarting deployment to reschedule."
+                            echo "[INFO] ${d} has not-Ready pod (${STUCK}); restarting deployment to reschedule."
                             kubectl rollout restart "deployment/${d}" -n circleguard-infra
                         fi
                     done
