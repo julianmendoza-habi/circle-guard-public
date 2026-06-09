@@ -61,6 +61,10 @@ configure(subprojects.filter { it.name != "e2e-tests" }) {
         "testCompileOnly"("org.projectlombok:lombok")
         "testAnnotationProcessor"("org.projectlombok:lombok")
         "implementation"("org.jetbrains.kotlin:kotlin-reflect")
+        // Observability: Actuator exposes health/info/metrics; Micrometer's Prometheus
+        // registry renders /actuator/prometheus for scraping. Shared by all 8 services.
+        "implementation"("org.springframework.boot:spring-boot-starter-actuator")
+        "implementation"("io.micrometer:micrometer-registry-prometheus")
         "testImplementation"("org.springframework.boot:spring-boot-starter-test")
         "testRuntimeOnly"("com.h2database:h2")
     }

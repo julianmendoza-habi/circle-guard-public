@@ -1,0 +1,409 @@
+# CircleGuard observability stack: Prometheus (metrics scrape) + Grafana (dashboards).
+#
+# Scope: dev/stage demos. Storage is emptyDir (ephemeral) so the manifest applies on any
+# cluster without a default StorageClass; for prod swap the emptyDir volumes for
+# PersistentVolumeClaims (the EKS module already ships the aws-ebs-csi-driver addon — use a
+# gp3 StorageClass). Grafana admin defaults to admin/admin — override for anything real.
+#
+# Discovery is annotation-based: Prometheus scrapes every pod carrying
+#   prometheus.io/scrape: "true"  (+ prometheus.io/port and prometheus.io/path)
+# which the app Deployments in deploy/k8s/apps/* already declare on port 8080
+# at /actuator/prometheus.
+#
+# Apply AFTER namespaces + apps:
+#   kubectl apply -f deploy/k8s/infra/observability.yaml
+# Reach the UIs (no Ingress in this manifest):
+#   kubectl -n circleguard-observability port-forward svc/grafana 3000:3000
+#   kubectl -n circleguard-observability port-forward svc/prometheus 9090:9090
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: circleguard-observability
+  labels:
+    app.kubernetes.io/part-of: circleguard
+    component: observability
+---
+# ---------- Prometheus RBAC (needs cluster-wide read for Kubernetes service discovery) ----------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: circleguard-observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: circleguard-prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/metrics", "services", "endpoints", "pods"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: circleguard-prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: circleguard-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: circleguard-observability
+---
+# ---------- Prometheus scrape configuration ----------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: circleguard-observability
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: circleguard
+
+    scrape_configs:
+      # Prometheus scraping itself.
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # All annotated pods (the CircleGuard microservices) via Kubernetes SD.
+      - job_name: circleguard-services
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # Keep only pods opting in with prometheus.io/scrape: "true".
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          # Use the annotated metrics path (default /metrics).
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # Rewrite the scrape address to the annotated port.
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # Surface useful labels on every series.
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: circleguard-observability
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.54.1
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=3d"
+            - "--web.enable-lifecycle"
+          ports:
+            - containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: circleguard-observability
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+---
+# ---------- Grafana datasource + dashboard provisioning ----------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  namespace: circleguard-observability
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.circleguard-observability.svc.cluster.local:9090
+        isDefault: true
+        editable: true
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: circleguard
+        orgId: 1
+        folder: CircleGuard
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: circleguard-observability
+data:
+  circleguard-overview.json: |
+    {
+      "uid": "circleguard-overview",
+      "title": "CircleGuard — Overview",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "time": { "from": "now-1h", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "application",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "query": "label_values(jvm_info, application)",
+            "includeAll": true,
+            "multi": true,
+            "current": { "text": "All", "value": "$__all" }
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Gate validations / sec (business metric)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 20 } } },
+          "targets": [
+            {
+              "expr": "sum(rate(circleguard_gate_validations_total[5m])) by (result)",
+              "legendFormat": "{{result}}"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Total gate validations",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            {
+              "expr": "sum(circleguard_gate_validations_total) by (result)",
+              "legendFormat": "{{result}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "HTTP request rate by service",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_requests_seconds_count[5m])) by (application)",
+              "legendFormat": "{{application}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "HTTP p95 latency by service (s)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, application))",
+              "legendFormat": "{{application}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "HTTP 5xx rate by service",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) by (application)",
+              "legendFormat": "{{application}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "JVM heap used by service (bytes)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "targets": [
+            {
+              "expr": "sum(jvm_memory_used_bytes{area=\"heap\"}) by (application)",
+              "legendFormat": "{{application}}"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Targets up",
+          "gridPos": { "h": 6, "w": 24, "x": 0, "y": 24 },
+          "targets": [
+            { "expr": "up{job=\"circleguard-services\"}", "legendFormat": "{{app}}" }
+          ]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: circleguard-observability
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+        runAsNonRoot: true
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.2.0
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: admin
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: storage
+              mountPath: /var/lib/grafana
+      volumes:
+        # Datasource + dashboard *provider* configs come from the provisioning ConfigMap.
+        - name: datasources
+          configMap:
+            name: grafana-provisioning
+            items:
+              - key: datasource.yaml
+                path: datasource.yaml
+        - name: dashboard-provider
+          configMap:
+            name: grafana-provisioning
+            items:
+              - key: dashboards.yaml
+                path: dashboards.yaml
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: circleguard-observability
+  labels:
+    app: grafana
+spec:
+  # ClusterIP + port-forward for demos. Switch to LoadBalancer (or add an Ingress) to expose it.
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
