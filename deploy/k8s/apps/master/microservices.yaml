@@ -36,6 +36,10 @@ spec:
       app: circleguard-auth-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /actuator/prometheus
       labels:
         app: circleguard-auth-service
     spec:
@@ -68,14 +72,33 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: circleguard-runtime-master
           env:
             - name: SERVER_PORT
               value: "8080"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: circleguard-runtime-master
+                  key: POSTGRES_HOST
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_auth
+              value: jdbc:postgresql://$(POSTGRES_HOST):5432/circleguard_auth
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
             - name: SPRING_DATASOURCE_PASSWORD
@@ -122,6 +145,10 @@ spec:
       app: circleguard-identity-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /actuator/prometheus
       labels:
         app: circleguard-identity-service
     spec:
@@ -131,14 +158,33 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: circleguard-runtime-master
           env:
             - name: SERVER_PORT
               value: "8080"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: circleguard-runtime-master
+                  key: POSTGRES_HOST
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_identity
+              value: jdbc:postgresql://$(POSTGRES_HOST):5432/circleguard_identity
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
             - name: SPRING_DATASOURCE_PASSWORD
@@ -176,6 +222,10 @@ spec:
       app: circleguard-form-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /actuator/prometheus
       labels:
         app: circleguard-form-service
     spec:
@@ -185,14 +235,33 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: circleguard-runtime-master
           env:
             - name: SERVER_PORT
               value: "8080"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: circleguard-runtime-master
+                  key: POSTGRES_HOST
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_form
+              value: jdbc:postgresql://$(POSTGRES_HOST):5432/circleguard_form
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
             - name: SPRING_DATASOURCE_PASSWORD
@@ -225,6 +294,10 @@ spec:
       app: circleguard-promotion-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /actuator/prometheus
       labels:
         app: circleguard-promotion-service
     spec:
@@ -279,14 +352,33 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: circleguard-runtime-master
           env:
             - name: SERVER_PORT
               value: "8080"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: circleguard-runtime-master
+                  key: POSTGRES_HOST
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_promotion
+              value: jdbc:postgresql://$(POSTGRES_HOST):5432/circleguard_promotion
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
             - name: SPRING_DATASOURCE_PASSWORD
@@ -334,6 +426,10 @@ spec:
       app: circleguard-notification-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /actuator/prometheus
       labels:
         app: circleguard-notification-service
     spec:
@@ -343,6 +439,20 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            failureThreshold: 6
           envFrom:
             - configMapRef:
                 name: circleguard-runtime-master
@@ -391,6 +501,10 @@ spec:
       app: circleguard-gateway-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /actuator/prometheus
       labels:
         app: circleguard-gateway-service
     spec:
@@ -413,15 +527,23 @@ spec:
           ports:
             - containerPort: 8080
           startupProbe:
-            tcpSocket:
+            httpGet:
+              path: /actuator/health/readiness
               port: 8080
             periodSeconds: 10
             failureThreshold: 60
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /actuator/health/readiness
               port: 8080
             periodSeconds: 10
             timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 15
             failureThreshold: 6
           envFrom:
             - configMapRef:

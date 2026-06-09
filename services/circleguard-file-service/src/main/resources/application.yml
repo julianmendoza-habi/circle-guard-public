@@ -11,3 +11,18 @@ spring:
 
 server:
   port: 8085
+
+# --- Observability (Actuator + Micrometer/Prometheus) ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true   # exposes /actuator/health/{liveness,readiness}
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
