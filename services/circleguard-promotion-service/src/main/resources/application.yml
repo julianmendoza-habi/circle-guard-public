@@ -37,3 +37,18 @@ server:
 jwt:
   secret: "my-super-secret-dev-key-32-chars-long-12345678"
   expiration: 3600000
+
+# --- Observability (Actuator + Micrometer/Prometheus) ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true   # exposes /actuator/health/{liveness,readiness}
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
