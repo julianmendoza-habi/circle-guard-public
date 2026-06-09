@@ -1,0 +1,20 @@
+# Terraform working files — never commit
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Variable files that may carry secrets (commit *.tfvars only when free of secrets;
+# the committed dev/stage/prod tfvars here contain no real secrets).
+*.auto.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config / plan output
+.terraformrc
+terraform.rc
+*.tfplan

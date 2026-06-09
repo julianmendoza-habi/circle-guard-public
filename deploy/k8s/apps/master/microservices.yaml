@@ -74,8 +74,13 @@ spec:
           env:
             - name: SERVER_PORT
               value: "8080"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: circleguard-runtime-master
+                  key: POSTGRES_HOST
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_auth
+              value: jdbc:postgresql://$(POSTGRES_HOST):5432/circleguard_auth
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
             - name: SPRING_DATASOURCE_PASSWORD
@@ -137,8 +142,13 @@ spec:
           env:
             - name: SERVER_PORT
               value: "8080"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: circleguard-runtime-master
+                  key: POSTGRES_HOST
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_identity
+              value: jdbc:postgresql://$(POSTGRES_HOST):5432/circleguard_identity
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
             - name: SPRING_DATASOURCE_PASSWORD
@@ -191,8 +201,13 @@ spec:
           env:
             - name: SERVER_PORT
               value: "8080"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: circleguard-runtime-master
+                  key: POSTGRES_HOST
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_form
+              value: jdbc:postgresql://$(POSTGRES_HOST):5432/circleguard_form
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
             - name: SPRING_DATASOURCE_PASSWORD
@@ -285,8 +300,13 @@ spec:
           env:
             - name: SERVER_PORT
               value: "8080"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: circleguard-runtime-master
+                  key: POSTGRES_HOST
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres.circleguard-infra.svc.cluster.local:5432/circleguard_promotion
+              value: jdbc:postgresql://$(POSTGRES_HOST):5432/circleguard_promotion
             - name: SPRING_DATASOURCE_USERNAME
               value: admin
             - name: SPRING_DATASOURCE_PASSWORD
