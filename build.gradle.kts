@@ -4,6 +4,8 @@ plugins {
     kotlin("jvm") version "1.9.24" apply false
     kotlin("plugin.spring") version "1.9.24" apply false
     kotlin("plugin.jpa") version "1.9.24" apply false
+    // Static analysis: aggregates the whole multi-project for SonarQube (CI `sonar` task).
+    id("org.sonarqube") version "5.1.0.4882"
 }
 
 allprojects {
@@ -17,6 +19,8 @@ allprojects {
 
 subprojects {
     apply(plugin = "java")
+    // Code coverage: JaCoCo XML feeds SonarQube's sonar.coverage.jacoco.xmlReportPaths.
+    apply(plugin = "jacoco")
     extensions.configure<JavaPluginExtension> {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(21))
@@ -29,6 +33,8 @@ subprojects {
                 excludeTags("integration")
             }
         }
+        // Always refresh the coverage report after tests so CI can publish/scan it.
+        finalizedBy(tasks.named("jacocoTestReport"))
         if (!project.hasProperty("integration")) {
             // JUnit's tag filter runs *after* test classes are loaded, so any class with a
             // static `@Container` field can still trigger Testcontainers' Docker discovery
@@ -47,6 +53,24 @@ subprojects {
                 System.getenv("DOCKER_HOST") ?: "unix:///var/run/docker.sock",
             )
         }
+    }
+
+    tasks.withType<JacocoReport> {
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+        }
+    }
+}
+
+// SonarQube analysis (root aggregates all modules). Server URL + token are supplied by CI via
+// `-Dsonar.host.url` / `SONAR_TOKEN` (see ci/Jenkinsfile.*); the task is a no-op locally without them.
+sonar {
+    properties {
+        property("sonar.projectKey", "circleguard")
+        property("sonar.projectName", "CircleGuard")
+        property("sonar.coverage.jacoco.xmlReportPaths", "**/build/reports/jacoco/test/jacocoTestReport.xml")
+        property("sonar.junit.reportPaths", "**/build/test-results/test")
     }
 }
 
