@@ -1,16 +1,43 @@
 /**
- * Stage pipeline: Gradle tests, deploy stage namespace, Locust performance report, and E2E smoke tests.
+ * Stage pipeline: Gradle tests (+integration), optional SonarQube + Quality Gate, Docker build,
+ * Trivy scan, deploy stage namespace, Locust performance report, and E2E smoke tests.
  *
- * Integration, deploy, Locust, and E2E stages are mandatory. E2E uses kubectl port-forward (see
+ * Integration, deploy, Locust, and E2E stages are mandatory. SonarQube runs only when
+ * RUN_SONARQUBE=true (needs a configured server). E2E uses kubectl port-forward (see
  * scripts/ci/run-e2e-with-kube-port-forward.sh) — no E2E_* job parameters.
  */
+
+// Optional notifications (Slack then email); never throws.
+def notifyBuild(String status) {
+    def color = (status == 'SUCCESS') ? 'good' : (status == 'UNSTABLE' ? 'warning' : 'danger')
+    def line = "[CircleGuard][stage] ${status}: ${env.JOB_NAME} #${env.BUILD_NUMBER} — ${env.BUILD_URL}"
+    try { slackSend(color: color, message: line) } catch (err) { echo "[notify] Slack skipped: ${err.message}" }
+    try {
+        if (env.NOTIFY_EMAIL?.trim()) {
+            mail(to: env.NOTIFY_EMAIL, subject: "[CircleGuard][stage] ${status} #${env.BUILD_NUMBER}",
+                 body: "Status: ${status}\nBuild: ${env.BUILD_URL}")
+        }
+    } catch (err) { echo "[notify] Email skipped: ${err.message}" }
+}
+
 pipeline {
     agent any
+    options { timestamps() }
+    parameters {
+        booleanParam(name: 'RUN_SONARQUBE', defaultValue: false,
+            description: 'Run SonarQube analysis + Quality Gate (requires a SonarQube server configured in Jenkins).')
+        string(name: 'SONARQUBE_SERVER', defaultValue: 'SonarQube',
+            description: 'Name of the SonarQube server (Manage Jenkins → System).')
+        booleanParam(name: 'TRIVY_FAIL_ON_FINDINGS', defaultValue: false,
+            description: 'Fail the build on HIGH/CRITICAL image vulnerabilities (stage defaults to warn-only).')
+        string(name: 'NOTIFY_EMAIL', defaultValue: '', description: 'Recipients for notifications (optional).')
+    }
     environment {
         IMAGE_NAMESPACE = 'circleguard'
         LOCUST_USERS = '20'
         LOCUST_SPAWN_RATE = '2'
         LOCUST_RUN_TIME = '2m'
+        NOTIFY_EMAIL = "${params.NOTIFY_EMAIL}"
     }
     stages {
         stage('Checkout') {
@@ -27,6 +54,26 @@ pipeline {
             post {
                 always {
                     junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml,**/build/test-results/integrationTest/*.xml'
+                }
+            }
+        }
+        stage('SonarQube Analysis') {
+            when { expression { params.RUN_SONARQUBE } }
+            steps {
+                withSonarQubeEnv(params.SONARQUBE_SERVER) {
+                    sh '''
+                        set -eu
+                        if [ -S /var/run/docker.sock ]; then export DOCKER_HOST=unix:///var/run/docker.sock; fi
+                        ./gradlew sonar --build-cache -Pintegration
+                    '''
+                }
+            }
+        }
+        stage('Quality Gate') {
+            when { expression { params.RUN_SONARQUBE } }
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -49,6 +96,21 @@ pipeline {
                         docker build -f docker/Dockerfile.service --build-arg "SERVICE_DIR=${svcDir}" -t "${IMAGE_NAMESPACE}/${SHORT}:stage-latest" .
                     done
                 '''
+            }
+        }
+        stage('Trivy Image Scan') {
+            steps {
+                withEnv(["TRIVY_EXIT_CODE=${params.TRIVY_FAIL_ON_FINDINGS ? '1' : '0'}"]) {
+                    sh '''
+                        set -eu
+                        chmod +x scripts/ci/trivy-scan.sh
+                        IMGS=""
+                        for s in auth-service identity-service form-service promotion-service notification-service gateway-service; do
+                            IMGS="${IMGS} circleguard/${s}:stage-latest"
+                        done
+                        scripts/ci/trivy-scan.sh ${IMGS}
+                    '''
+                }
             }
         }
         stage('Deploy Kubernetes (stage)') {
@@ -110,5 +172,10 @@ pipeline {
                 '''
             }
         }
+    }
+    post {
+        success { script { notifyBuild('SUCCESS') } }
+        unstable { script { notifyBuild('UNSTABLE') } }
+        failure { script { notifyBuild('FAILURE') } }
     }
 }
