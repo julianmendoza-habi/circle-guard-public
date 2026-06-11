@@ -2,6 +2,7 @@ package com.circleguard.dashboard.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -11,10 +12,16 @@ import java.util.*;
 @Slf4j
 public class PromotionClient {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    // Built via RestTemplateBuilder so Micrometer Tracing instruments it and propagates the
+    // trace context on the dashboard -> promotion hop.
+    private final RestTemplate restTemplate;
 
     @Value("${circleguard.promotion-service.url:http://localhost:8088}")
     private String promotionServiceUrl;
+
+    public PromotionClient(RestTemplateBuilder restTemplateBuilder) {
+        this.restTemplate = restTemplateBuilder.build();
+    }
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> getHealthStats() {

@@ -69,6 +69,14 @@ data:
       external_labels:
         cluster: circleguard
 
+    rule_files:
+      - /etc/prometheus/alerts.yml
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ["alertmanager.circleguard-observability.svc.cluster.local:9093"]
+
     scrape_configs:
       # Prometheus scraping itself.
       - job_name: prometheus
@@ -105,6 +113,48 @@ data:
           - source_labels: [__meta_kubernetes_pod_label_app]
             action: replace
             target_label: app
+  alerts.yml: |
+    groups:
+      - name: circleguard
+        rules:
+          - alert: ServiceDown
+            expr: up{job="circleguard-services"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.app }} is down"
+              description: "No successful scrape of {{ $labels.app }} ({{ $labels.pod }}) for 1m."
+          - alert: HighHttp5xxRate
+            expr: |
+              sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) by (application)
+                / sum(rate(http_server_requests_seconds_count[5m])) by (application) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High 5xx rate on {{ $labels.application }}"
+              description: "{{ $labels.application }} is serving >5% 5xx responses over 5m."
+          - alert: HighHttpLatencyP95
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(http_server_requests_seconds_bucket[5m])) by (le, application)) > 1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High p95 latency on {{ $labels.application }}"
+              description: "{{ $labels.application }} p95 request latency >1s over 5m."
+          - alert: GateRedValidationSpike
+            expr: |
+              sum(rate(circleguard_gate_validations_total{result="red"}[5m]))
+                > 2 * sum(rate(circleguard_gate_validations_total{result="green"}[5m]))
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Spike in denied (RED) gate validations"
+              description: "RED gate validations exceed 2x GREEN over 5m — possible outbreak or attack."
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -194,6 +244,18 @@ data:
         access: proxy
         url: http://prometheus.circleguard-observability.svc.cluster.local:9090
         isDefault: true
+        editable: true
+      - name: Jaeger
+        uid: jaeger
+        type: jaeger
+        access: proxy
+        url: http://jaeger.circleguard-observability.svc.cluster.local:16686
+        editable: true
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki.circleguard-observability.svc.cluster.local:3100
         editable: true
   dashboards.yaml: |
     apiVersion: 1
@@ -407,3 +469,149 @@ spec:
   ports:
     - port: 3000
       targetPort: 3000
+---
+# ---------- Jaeger (distributed tracing backend, all-in-one) ----------
+# Accepts OTLP from the services on :4318 (HTTP) / :4317 (gRPC); UI on :16686.
+# all-in-one keeps traces in memory — fine for demos, not durable. For prod use the Jaeger
+# Operator with a Cassandra/Elasticsearch backend (or Grafana Tempo).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: circleguard-observability
+  labels:
+    app: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:1.60
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          ports:
+            - { containerPort: 16686, name: ui }
+            - { containerPort: 4317, name: otlp-grpc }
+            - { containerPort: 4318, name: otlp-http }
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 16686
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: circleguard-observability
+  labels:
+    app: jaeger
+spec:
+  selector:
+    app: jaeger
+  ports:
+    - { name: ui, port: 16686, targetPort: 16686 }
+    - { name: otlp-grpc, port: 4317, targetPort: 4317 }
+    - { name: otlp-http, port: 4318, targetPort: 4318 }
+---
+# ---------- Alertmanager (routes the Prometheus alert rules) ----------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: circleguard-observability
+data:
+  alertmanager.yml: |
+    route:
+      receiver: default
+      group_by: ["alertname", "application"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 3h
+    receivers:
+      # No external notifier is wired for the demo — firing alerts are visible in the
+      # Alertmanager UI (and the Prometheus "Alerts" tab). To notify Slack, uncomment and
+      # set the webhook (ideally injected from a Secret):
+      - name: default
+        # slack_configs:
+        #   - api_url: "https://hooks.slack.com/services/REPLACE"
+        #     channel: "#circleguard-alerts"
+        #     send_resolved: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: circleguard-observability
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - "--config.file=/etc/alertmanager/alertmanager.yml"
+            - "--storage.path=/alertmanager"
+          ports:
+            - containerPort: 9093
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+            - name: data
+              mountPath: /alertmanager
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: circleguard-observability
+  labels:
+    app: alertmanager
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - port: 9093
+      targetPort: 9093

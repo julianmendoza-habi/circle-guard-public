@@ -30,3 +30,11 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+  # Distributed tracing -> OTLP -> Jaeger. Full sampling for the demo; in k8s the endpoint is
+  # overridden via the MANAGEMENT_OTLP_TRACING_ENDPOINT env (relaxed binding) from the ConfigMap.
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
