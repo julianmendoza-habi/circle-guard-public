@@ -65,6 +65,10 @@ configure(subprojects.filter { it.name != "e2e-tests" }) {
         // registry renders /actuator/prometheus for scraping. Shared by all 8 services.
         "implementation"("org.springframework.boot:spring-boot-starter-actuator")
         "implementation"("io.micrometer:micrometer-registry-prometheus")
+        // Distributed tracing: Micrometer Tracing bridges Observation spans to OpenTelemetry,
+        // and the OTLP exporter ships them to Jaeger (OTLP/HTTP on :4318).
+        "implementation"("io.micrometer:micrometer-tracing-bridge-otel")
+        "implementation"("io.opentelemetry:opentelemetry-exporter-otlp")
         "testImplementation"("org.springframework.boot:spring-boot-starter-test")
         "testRuntimeOnly"("com.h2database:h2")
     }
