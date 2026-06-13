@@ -4,12 +4,12 @@
 .DESCRIPTION
     Reproducible local deployment used for the demo. Steps:
       1. Create kind cluster 'circleguard' (if missing).
-      2. Build the 6 service fat JARs (inside a gradle:8.14-jdk21 container — the native gradlew is
-         loopback-blocked on this host; see HANDOFF.md §4).
-      3. Build the 6 Docker images and load them into the kind node via `kind load image-archive`
-         (docker save | load — reliable with Docker's containerd image store, unlike
-         `kind load docker-image`).
-      4. Apply manifests in order: namespaces -> infra -> ensure-databases -> apps -> observability.
+      2. Build the 6 service fat JARs (inside a gradle:8.14-jdk21 container - the native gradlew is
+         loopback-blocked on this host; see HANDOFF.md section 4).
+      3. Build the 6 Docker images and load them into the kind node via 'kind load image-archive'
+         (docker save then load - reliable with Docker's containerd image store, unlike
+         'kind load docker-image').
+      4. Apply manifests in order: namespaces, infra, ensure-databases, apps, observability.
     Re-runnable: existing cluster/images are reused. Requires Docker Desktop running + kind + kubectl.
 
     After it finishes, run ./scripts/demo-port-forwards.ps1 and follow docs/DEMO_RUNBOOK.md.
@@ -23,9 +23,9 @@ $repo = (Resolve-Path "$PSScriptRoot\..").Path
 $cluster = 'circleguard'
 $services = 'auth-service','identity-service','form-service','promotion-service','notification-service','gateway-service'
 
-function Step($m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
+function Step($m) { Write-Host ""; Write-Host "=== $m ===" -ForegroundColor Cyan }
 
-# 1) Cluster ----------------------------------------------------------------------------------
+# 1) Cluster
 Step "Ensuring kind cluster '$cluster'"
 if ((kind get clusters 2>$null) -notcontains $cluster) {
     kind create cluster --name $cluster --wait 150s
@@ -33,7 +33,7 @@ if ((kind get clusters 2>$null) -notcontains $cluster) {
 kubectl config use-context "kind-$cluster" | Out-Null
 
 if (-not $SkipBuild) {
-    # 2) Fat JARs (in container) --------------------------------------------------------------
+    # 2) Fat JARs (in container)
     Step "Building 6 service fat JARs (gradle container)"
     $tasks = ($services | ForEach-Object { ":services:circleguard-$_:bootJar" }) -join ' '
     $g = "gradle --no-daemon --console=plain --project-cache-dir /tmp/pc $tasks -x test 2>&1"
@@ -42,7 +42,7 @@ if (-not $SkipBuild) {
         gradle:8.14-jdk21 bash -lc $g | Select-Object -Last 2
     if ($LASTEXITCODE -ne 0) { throw "gradle bootJar build failed" }
 
-    # 3) Images + load into node --------------------------------------------------------------
+    # 3) Images + load into node
     Step "Building + loading 6 images into the kind node"
     Push-Location $repo
     foreach ($s in $services) {
@@ -55,7 +55,7 @@ if (-not $SkipBuild) {
     Pop-Location
 }
 
-# 4) Manifests --------------------------------------------------------------------------------
+# 4) Manifests
 Step "Applying namespaces + infrastructure"
 kubectl apply -f deploy/k8s/namespaces.yaml
 kubectl apply -f deploy/k8s/infra/postgres-redis-neo4j.yaml
@@ -80,6 +80,7 @@ foreach ($s in $services) {
     kubectl rollout status "deployment/circleguard-$s" -n circleguard-dev --timeout=300s
 }
 
-Step "Done — cluster state"
+Step "Done - cluster state"
 kubectl get pods -A | Select-String 'circleguard'
-Write-Host "`nNext: ./scripts/demo-port-forwards.ps1  then follow docs/DEMO_RUNBOOK.md" -ForegroundColor Green
+Write-Host ""
+Write-Host "Next: ./scripts/demo-port-forwards.ps1  then follow docs/DEMO_RUNBOOK.md" -ForegroundColor Green
