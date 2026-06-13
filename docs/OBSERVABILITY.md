@@ -219,7 +219,6 @@ auto-provisioned (datasource + dashboard, no manual import).
 The metrics endpoint works on a plain `bootRun`/`bootJar`:
 
 ```bash
-# (CI Linux — local JVM build is blocked in this dev env, see HANDOFF.md §4)
 ./gradlew :services:circleguard-gateway-service:bootJar
 java -jar services/circleguard-gateway-service/build/libs/*.jar &
 curl localhost:8087/actuator/health/readiness     # {"status":"UP"}

@@ -13,14 +13,12 @@ incremento entregable**. Cada sprint produce un incremento potencialmente desple
 `develop` mediante una rama `feature/*` y su Pull Request.
 
 - **Roles:** Product Owner (prioriza el backlog según la rúbrica/valor), Dev Team (implementa),
-  Scrum Master (remueve impedimentos; p. ej. el bloqueo de build local por loopback AF_UNIX se
-  resolvió compilando en contenedor Linux).
+  Scrum Master (remueve impedimentos y vela por los quality gates).
 - **Ceremonias:** planning (selección del foco de la iteración por relación valor/esfuerzo),
-  daily async (notas en el `HANDOFF.md`), review (demo del incremento), retro (lecciones → siguiente
-  iteración; ver §5).
-- **Artefactos:** Product Backlog (historias, §4), Sprint Backlog (foco de la iteración),
-  Incremento (rama mergeada + demo), y el **handoff vivo** [`HANDOFF.md`](../HANDOFF.md) como radiador
-  de información entre sesiones.
+  seguimiento continuo, review (demo del incremento), retro (lecciones → siguiente iteración; ver §5).
+- **Artefactos:** Product Backlog (historias, §4), Sprint Backlog (foco de la iteración) e
+  Incremento (rama `feature/*` mergeada + demo). El historial de ramas, commits y PRs en GitHub es la
+  traza auditable del avance.
 
 > **Por qué Scrum y no Kanban puro:** el trabajo se entregó en incrementos discretos y bien acotados
 > (un foco de la rúbrica por iteración), que mapean naturalmente a sprints. El backlog se gestiona
@@ -104,6 +102,6 @@ inicial. Cada incremento se verificó (tests verdes en contenedor; despliegue lo
 
 ## 6. Definition of Done (DoD)
 
-Una historia está *Done* cuando: el código compila y los tests pasan (en CI/contenedor Linux); el
-incremento se documenta (doc dedicado en `docs/`); pasa los quality gates aplicables (Sonar/Trivy/
-cobertura); y se actualiza el `HANDOFF.md` con el estado y el siguiente foco.
+Una historia está *Done* cuando: el código compila y los tests pasan en CI; el incremento se
+documenta (doc dedicado en `docs/`); pasa los quality gates aplicables (Sonar/Trivy/cobertura); y se
+mergea a `develop` mediante PR.

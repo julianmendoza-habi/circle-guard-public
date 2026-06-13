@@ -4,7 +4,7 @@
 .DESCRIPTION
     Run this in its OWN PowerShell window before recording. It opens loopback port-forwards to the
     app services and the observability UIs, prints the URLs, and tears everything down when you
-    press Enter. Requires the cluster to be up (see docs/DEMO_RUNBOOK.md).
+    press Enter. Requires the cluster to be up (deploy with scripts/deploy-local-kind.ps1).
 #>
 $ErrorActionPreference = 'SilentlyContinue'
 

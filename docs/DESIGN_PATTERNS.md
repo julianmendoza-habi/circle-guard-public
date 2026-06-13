@@ -207,8 +207,8 @@ exponer analítica agregada, evitando reidentificación en grupos pequeños.
   cobertura de los tests nuevos (ver [`ci/README.md`](../ci/README.md)).
 - **Runtime:** `/actuator/circuitbreakers`, `/actuator/health` y `/actuator/prometheus` exponen el
   estado y las métricas de los circuit breakers.
-- **Local:** el build JVM no compila en este entorno (loopback AF_UNIX bloqueado, ver `HANDOFF.md`);
-  los tests unitarios de fallback y del toggle se ejecutan en CI.
+- **Tests:** los tests unitarios de fallback (Circuit Breaker) y del Feature Toggle se ejecutan en el
+  pipeline (`./gradlew test`).
 
 ## 4. Follow-ups opcionales (no requeridos)
 - Añadir `@TimeLimiter` + `@Bulkhead` a los clientes REST para acotar latencia y aislar pools.

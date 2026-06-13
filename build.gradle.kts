@@ -115,9 +115,8 @@ configure(subprojects.filter { it.name != "e2e-tests" }) {
 // Aggregated code coverage across all microservice modules.
 // Each module already emits JaCoCo XML (consumed by SonarQube). This root task merges every
 // module's execution data into ONE human-readable XML + HTML report, and a companion gate
-// verifies a minimum line coverage. Run via the Docker helper on this Windows host (native
-// gradlew is loopback-blocked — see scripts/verify-local-docker.ps1 / HANDOFF.md §4):
-//   ./scripts/verify-local-docker.ps1 test jacocoAggregatedReport jacocoCoverageVerification
+// verifies a minimum line coverage. Run:
+//   ./gradlew test jacocoAggregatedReport jacocoCoverageVerification
 // Cross-project sourceSet/exec lookups are wrapped in provider {} so they resolve at execution
 // time (after every subproject has been configured), not during root-script evaluation.
 // ---------------------------------------------------------------------------------------------
@@ -158,7 +157,7 @@ val jacocoAggregatedReport = tasks.register<JacocoReport>("jacocoAggregatedRepor
 }
 
 // Coverage gate. Threshold is modest by default (raise as the suite grows) and overridable:
-//   ./scripts/verify-local-docker.ps1 jacocoCoverageVerification -PcoverageMin=0.40
+//   ./gradlew jacocoCoverageVerification -PcoverageMin=0.40
 val coverageMin = (findProperty("coverageMin") as String? ?: "0.30").toBigDecimal()
 tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
     group = "verification"

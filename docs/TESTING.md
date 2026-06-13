@@ -4,11 +4,6 @@ Pirámide de pruebas del proyecto, cómo correr cada nivel, y cómo se integran 
 gaps cerrados en la iteración "Pruebas completas": **reportes de cobertura (JaCoCo agregado + gate)**
 y **DAST con OWASP ZAP**.
 
-> ⚠️ **Build local en Windows:** el `gradlew` nativo no corre en esta máquina (loopback AF_UNIX
-> bloqueado — ver [HANDOFF.md](../HANDOFF.md) §4). Verificar siempre dentro de Linux con
-> [`scripts/verify-local-docker.ps1`](../scripts/verify-local-docker.ps1) (contenedor `gradle:8.14-jdk21`),
-> que además trae el JDK 21 del toolchain.
-
 ---
 
 ## Pirámide
@@ -24,11 +19,11 @@ y **DAST con OWASP ZAP**.
 
 | Nivel | Dónde | Infra | Comando |
 |---|---|---|---|
-| Unit | `services/*/src/test/java` | ninguna (H2 en runtime) | `./scripts/verify-local-docker.ps1 test` |
+| Unit | `services/*/src/test/java` | ninguna (H2 en runtime) | `./gradlew test` |
 | Integración | `services/*/src/integrationTest` | Docker (Testcontainers) | `gradle test -Pintegration` (en CI/Linux) |
 | E2E | `e2e-tests/` | entorno desplegado | `scripts/ci/run-e2e-with-kube-port-forward.sh <ns>` |
 | Performance | `tests/performance/locustfile.py` | entorno desplegado | `scripts/ci/run-locust-with-kube-port-forward.sh` |
-| Cobertura | raíz (`jacocoAggregatedReport`) | ninguna | `./scripts/verify-local-docker.ps1 test jacocoAggregatedReport` |
+| Cobertura | raíz (`jacocoAggregatedReport`) | ninguna | `./gradlew test jacocoAggregatedReport` |
 | DAST | `scripts/ci/zap-baseline.sh` | gateway corriendo + Docker | `scripts/ci/run-zap-with-kube-port-forward.sh <ns>` |
 
 ---
@@ -44,10 +39,10 @@ Ejemplos de esta iteración y la anterior:
 [`PromotionClientFallbackTest`](../services/circleguard-dashboard-service/src/test/java/com/circleguard/dashboard/client/PromotionClientFallbackTest.java),
 [`NotificationDispatcherFeatureToggleTest`](../services/circleguard-notification-service/src/test/java/com/circleguard/notification/service/NotificationDispatcherFeatureToggleTest.java).
 
-```powershell
-./scripts/verify-local-docker.ps1 test
+```bash
+./gradlew test
 # o un módulo / una clase:
-./scripts/verify-local-docker.ps1 :services:circleguard-auth-service:test --tests "*FallbackTest"
+./gradlew :services:circleguard-auth-service:test --tests "*FallbackTest"
 ```
 
 > **Fix de esta iteración:** `NotificationRetryTest` y `ExposureNotificationListenerTest`
@@ -97,10 +92,10 @@ raíz, dos tareas que dan **una** vista combinada y un **gate**:
 - **`jacocoCoverageVerification`** — falla el build si la cobertura de **líneas** agregada cae por
   debajo de `-PcoverageMin` (default `0.30`, ajustable).
 
-```powershell
-./scripts/verify-local-docker.ps1 test jacocoAggregatedReport
+```bash
+./gradlew test jacocoAggregatedReport
 # gate (sube el umbral a medida que crece el suite):
-./scripts/verify-local-docker.ps1 jacocoCoverageVerification -PcoverageMin=0.30
+./gradlew jacocoCoverageVerification -PcoverageMin=0.30
 ```
 
 **Línea base medida (esta iteración):** cobertura de líneas agregada ≈ **35%**. Por módulo:
@@ -140,9 +135,8 @@ scripts/ci/zap-baseline.sh http://127.0.0.1:18087
 scripts/ci/run-zap-with-kube-port-forward.sh circleguard-dev
 ```
 
-> El runtime de ZAP usa `docker run --network host` para alcanzar el port-forward de loopback —
-> patrón del agente Linux de CI; no es fielmente reproducible en Docker Desktop Windows, así que el
-> scan se valida en CI.
+> El runtime de ZAP usa `docker run --network host` para alcanzar el port-forward del gateway;
+> el escaneo se ejecuta como una etapa del pipeline contra el ambiente desplegado.
 
 ---
 

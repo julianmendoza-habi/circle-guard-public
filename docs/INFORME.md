@@ -86,10 +86,9 @@ Detalle: [`SECURITY.md`](SECURITY.md).
 
 ## 11. Despliegue y operación
 Despliegue **reproducible en Kubernetes local (kind)** con `scripts/deploy-local-kind.ps1`
-(6 microservicios + infra + observabilidad). Manual de demo/operación:
-[`DEMO_RUNBOOK.md`](DEMO_RUNBOOK.md). *Nota técnica:* el build JVM nativo no corre en el host
-Windows (loopback AF_UNIX), por lo que la compilación se hace en contenedor Linux
-(`scripts/verify-local-docker.ps1`).
+(6 microservicios + infra + observabilidad); los port-forwards y el flujo de demo se automatizan con
+`scripts/demo-port-forwards.ps1` y `scripts/demo-qr-token.ps1`. La imagen de cada servicio se
+construye con `docker/Dockerfile.service` y se publica al registro (ECR/Docker Hub) desde el pipeline.
 
 ## 12. Costos de infraestructura
 Estimación por ambiente (AWS) en [`terraform/README.md`](../terraform/README.md): el costo lo
@@ -101,9 +100,9 @@ spot/scale-to-zero (ver bonos/roadmap).
 - **Resultados:** stack completo desplegado y verificado (gate GREEN/RED, 6 targets en Prometheus,
   trazas en Jaeger, dashboards poblados); suite de pruebas en verde; cobertura ≈35% con gate.
 - **Lecciones:** (1) la observabilidad fue clave para diagnosticar fallos (probe 401, health de
-  mail); (2) la resiliencia (Circuit Breaker) evita fallos en cascada; (3) un bloqueo de entorno
-  (loopback AF_UNIX) se resolvió compilando/desplegando en contenedores Linux; (4) el flujo GitFlow
-  por ambiente facilitó iteraciones controladas con quality gates.
+  mail); (2) la resiliencia (Circuit Breaker) evita fallos en cascada; (3) construir y desplegar en
+  contenedores garantizó consistencia entre el entorno local y CI; (4) el flujo GitFlow por ambiente
+  facilitó iteraciones controladas con quality gates.
 
 ---
 

@@ -37,11 +37,10 @@ observabilidad completas. Consolida las 5 iteraciones (sprints) del proyecto.
 
 ### 🚀 Despliegue
 - Reproducible en Kubernetes local (kind) con `scripts/deploy-local-kind.ps1`; demo con
-  `scripts/demo-port-forwards.ps1` + `scripts/demo-qr-token.ps1` (ver [`DEMO_RUNBOOK.md`](DEMO_RUNBOOK.md)).
+  `scripts/demo-port-forwards.ps1` + `scripts/demo-qr-token.ps1`.
 - 6 microservicios desplegados: auth, identity, form, promotion, notification, gateway.
 
 ### ⚠️ Notas / limitaciones conocidas
-- El build JVM nativo no corre en el host Windows (loopback AF_UNIX); se compila en contenedor Linux.
 - `dashboard` y `file` no están en los manifiestos de despliegue (6 de 8 servicios desplegados).
 - Cobertura de líneas agregada ≈ 35% (línea base; gate en 0.30).
 

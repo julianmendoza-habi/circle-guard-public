@@ -4,15 +4,15 @@
 .DESCRIPTION
     Reproducible local deployment used for the demo. Steps:
       1. Create kind cluster 'circleguard' (if missing).
-      2. Build the 6 service fat JARs (inside a gradle:8.14-jdk21 container - the native gradlew is
-         loopback-blocked on this host; see HANDOFF.md section 4).
+      2. Build the 6 service fat JARs inside a gradle:8.14-jdk21 container (reproducible build that
+         pins the Java 21 toolchain).
       3. Build the 6 Docker images and load them into the kind node via 'kind load image-archive'
          (docker save then load - reliable with Docker's containerd image store, unlike
          'kind load docker-image').
       4. Apply manifests in order: namespaces, infra, ensure-databases, apps, observability.
     Re-runnable: existing cluster/images are reused. Requires Docker Desktop running + kind + kubectl.
 
-    After it finishes, run ./scripts/demo-port-forwards.ps1 and follow docs/DEMO_RUNBOOK.md.
+    After it finishes, run ./scripts/demo-port-forwards.ps1 to expose the app + dashboards.
 .PARAMETER SkipBuild
     Skip the JAR + image build (use already-built/loaded images).
 #>
@@ -83,4 +83,4 @@ foreach ($s in $services) {
 Step "Done - cluster state"
 kubectl get pods -A | Select-String 'circleguard'
 Write-Host ""
-Write-Host "Next: ./scripts/demo-port-forwards.ps1  then follow docs/DEMO_RUNBOOK.md" -ForegroundColor Green
+Write-Host "Next: ./scripts/demo-port-forwards.ps1  to expose the app + dashboards" -ForegroundColor Green
