@@ -10,24 +10,24 @@ GitHub / VS Code; export to PNG for the presentation if needed.
 flowchart TB
     subgraph AWS["AWS Account / Region (us-east-1)"]
         IGW["Internet Gateway"]
-        ECR["ECR\n8 image repos\n(scan_on_push)"]
+        ECR["ECR<br/>8 image repos<br/>(scan_on_push)"]
 
         subgraph VPC["VPC 10.0.0.0/16"]
             subgraph PUB["Public subnets (per AZ)"]
-                NAT["NAT Gateway(s)\n1 in dev/stage · 1-per-AZ in prod"]
-                ELB["Public LoadBalancer(s)\n(k8s Services)"]
+                NAT["NAT Gateway(s)<br/>1 in dev/stage, 1-per-AZ in prod"]
+                ELB["Public LoadBalancer(s)<br/>(k8s Services)"]
             end
 
             subgraph PRIV["Private subnets (per AZ)"]
                 subgraph EKS["EKS cluster (managed node group)"]
-                    APPS["8 Spring Boot pods\n(auth, identity, form, promotion,\nnotification, dashboard, file, gateway)"]
+                    APPS["8 Spring Boot pods<br/>(auth, identity, form, promotion,<br/>notification, dashboard, file, gateway)"]
                     NEO["Neo4j (in-cluster, EBS PVC)"]
                     LDAP["OpenLDAP (in-cluster)"]
-                    KAFKAIC["Kafka/ZK (in-cluster\nwhen enable_msk=false)"]
+                    KAFKAIC["Kafka/ZK (in-cluster<br/>when enable_msk=false)"]
                 end
-                RDS[("RDS PostgreSQL 16\n5 logical DBs")]
+                RDS[("RDS PostgreSQL 16<br/>5 logical DBs")]
                 REDIS[("ElastiCache Redis 7")]
-                MSK[("MSK Kafka\nprod only · enable_msk=true")]
+                MSK[("MSK Kafka<br/>prod only, enable_msk=true")]
             end
         end
     end
@@ -36,7 +36,7 @@ flowchart TB
     APPS -->|JDBC 5432| RDS
     APPS -->|6379| REDIS
     APPS -->|9092| KAFKAIC
-    APPS -. prod .->|9092/9094| MSK
+    APPS -.->|"prod 9092/9094"| MSK
     APPS -->|bolt 7687| NEO
     APPS -->|389| LDAP
     PRIV -->|egress| NAT --> IGW
@@ -55,9 +55,14 @@ the **EKS cluster security group** only — no public access. State lives in an 
 ```mermaid
 flowchart LR
     subgraph svc["Microservices"]
-        AUTH[auth] ; IDENT[identity] ; FORM[form]
-        PROMO[promotion] ; NOTIF[notification]
-        DASH[dashboard] ; FILE[file] ; GATE[gateway]
+        AUTH[auth]
+        IDENT[identity]
+        FORM[form]
+        PROMO[promotion]
+        NOTIF[notification]
+        DASH[dashboard]
+        FILE[file]
+        GATE[gateway]
     end
 
     AUTH --> RDS[(RDS Postgres)]
@@ -70,12 +75,12 @@ flowchart LR
     GATE --> REDIS[(ElastiCache Redis)]
     PROMO --> REDIS
 
-    FORM -->|publish| KAFKA{{Kafka: MSK or in-cluster}}
+    FORM -->|publish| KAFKA{{"Kafka: MSK or in-cluster"}}
     PROMO --> KAFKA
     KAFKA -->|consume| NOTIF
 
     AUTH --> LDAP[(OpenLDAP in-cluster)]
-    FILE -. S3/MinIO planned .-> S3[(future)]
+    FILE -.->|"S3/MinIO planned"| S3[(future)]
 
     classDef managed fill:#e8f0fe,stroke:#4285f4;
     class RDS,REDIS,KAFKA managed;
@@ -100,8 +105,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    BOOT["bootstrap/\n(local state)"] -->|creates| S3[("S3 bucket\ncircleguard-tfstate-<acct>\nversioned + encrypted")]
-    BOOT -->|creates| DDB[("DynamoDB\ncircleguard-tflock")]
+    BOOT["bootstrap/<br/>(local state)"] -->|creates| S3[("S3 bucket<br/>circleguard-tfstate-(acct)<br/>versioned + encrypted")]
+    BOOT -->|creates| DDB[("DynamoDB<br/>circleguard-tflock")]
     DEV["environments/dev"] -->|key dev/| S3
     STG["environments/stage"] -->|key stage/| S3
     PRD["environments/prod"] -->|key prod/| S3
