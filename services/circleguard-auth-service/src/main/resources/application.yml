@@ -38,12 +38,50 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,prometheus,metrics,circuitbreakers
   endpoint:
     health:
       probes:
         enabled: true   # exposes /actuator/health/{liveness,readiness}
       show-details: always
+  # Surface circuit-breaker state in /actuator/health (registerHealthIndicator below). It feeds the
+  # aggregate health group only, not the readiness probe, so an OPEN circuit won't get the pod killed.
+  health:
+    circuitbreakers:
+      enabled: true
   metrics:
     tags:
       application: ${spring.application.name}
+  # Distributed tracing -> OTLP -> Jaeger. Full sampling for the demo; in k8s the endpoint is
+  # overridden via the MANAGEMENT_OTLP_TRACING_ENDPOINT env (relaxed binding) from the ConfigMap.
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+
+# --- Resilience4j (Circuit Breaker + Retry on the synchronous auth -> identity hop) ---
+resilience4j:
+  circuitbreaker:
+    instances:
+      identityService:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5            # don't judge the failure rate until we have a sample
+        failure-rate-threshold: 50            # OPEN once >=50% of the window fails
+        wait-duration-in-open-state: 10s      # cool-off before probing again
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true       # exposes state via /actuator/health
+  retry:
+    instances:
+      identityService:
+        max-attempts: 3
+        wait-duration: 200ms
+        exponential-backoff-multiplier: 2     # 200ms -> 400ms between attempts
+        # Whitelist transient transport/server faults; client (4xx) errors and CB
+        # CallNotPermittedException fall through immediately to the fallback.
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException

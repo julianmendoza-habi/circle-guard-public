@@ -12,6 +12,8 @@ data:
   REDIS_HOST: redis.circleguard-infra.svc.cluster.local
   NEO4J_URI: bolt://neo4j.circleguard-infra.svc.cluster.local:7687
   LDAP_PRIMARY_URL: ldap://openldap.circleguard-infra.svc.cluster.local:389
+  # Tracing: OTLP/HTTP endpoint of the in-cluster Jaeger (overrides the application.yml default).
+  MANAGEMENT_OTLP_TRACING_ENDPOINT: http://jaeger.circleguard-observability.svc.cluster.local:4318/v1/traces
 ---
 apiVersion: v1
 kind: Secret

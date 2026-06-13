@@ -30,6 +30,16 @@ qr:
   secret: "my-qr-secret-key-for-dev-1234567890"
   expiration: 300
 
+# --- Feature Toggles (per-channel notification switches; default ON / opt-out) ---
+# Flip any of these (here, via ConfigMap, or env CIRCLEGUARD_FEATURES_CHANNELS_<CHANNEL>=false)
+# to mute a delivery channel without a code change. Bound by NotificationFeatureProperties.
+circleguard:
+  features:
+    channels:
+      email: true
+      sms: true
+      push: true
+
 server:
   port: 8082
 
@@ -47,3 +57,11 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+  # Distributed tracing -> OTLP -> Jaeger. Full sampling for the demo; in k8s the endpoint is
+  # overridden via the MANAGEMENT_OTLP_TRACING_ENDPOINT env (relaxed binding) from the ConfigMap.
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces

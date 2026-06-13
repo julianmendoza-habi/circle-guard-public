@@ -27,9 +27,64 @@ Declarative pipeline definitions live alongside the code:
 
 | File | Purpose |
 |------|---------|
-| [`Jenkinsfile.dev.groovy`](Jenkinsfile.dev.groovy) | Dev: Gradle tests, Docker builds, deploy `circleguard-dev` |
-| [`Jenkinsfile.stage.groovy`](Jenkinsfile.stage.groovy) | Stage: tests with integration, deploy `circleguard-stage`, Locust HTML/CSV, E2E smoke |
-| [`Jenkinsfile.master.groovy`](Jenkinsfile.master.groovy) | Master: tests with integration, Docker build/push, deploy `circleguard-master`, E2E smoke, release notes |
+| [`Jenkinsfile.dev.groovy`](Jenkinsfile.dev.groovy) | Dev: Gradle tests, (opt) SonarQube, Docker build, Trivy scan, deploy `circleguard-dev` |
+| [`Jenkinsfile.stage.groovy`](Jenkinsfile.stage.groovy) | Stage: tests + integration, (opt) SonarQube + Quality Gate, Docker build, Trivy scan, deploy `circleguard-stage`, Locust, E2E smoke |
+| [`Jenkinsfile.master.groovy`](Jenkinsfile.master.groovy) | Master: semantic version, tests + integration, (opt) SonarQube + Quality Gate, build, Trivy scan, push (Docker Hub/ECR), **manual approval**, deploy, E2E smoke, release notes, git tag |
+
+---
+
+## CI/CD avanzado (15%)
+
+Capacidades añadidas sobre el pipeline base. **Todas degradan con elegancia**: si la herramienta o
+credencial no está configurada, la etapa se salta o avisa en vez de romper el build.
+
+### 1. Análisis estático — SonarQube + cobertura (JaCoCo)
+- `build.gradle.kts` aplica **JaCoCo** (reporte XML por módulo) y **`org.sonarqube`** en la raíz
+  (tarea `sonar` que agrega todo el multi-proyecto). El XML alimenta
+  `sonar.coverage.jacoco.xmlReportPaths`.
+- Etapas `SonarQube Analysis` (+ `Quality Gate` en stage/master) corren solo con
+  **`RUN_SONARQUBE=true`** y usan `withSonarQubeEnv('<SONARQUBE_SERVER>')` → requieren un servidor
+  SonarQube en *Manage Jenkins → System* y un webhook hacia Jenkins para el Quality Gate.
+- Local: `./gradlew sonar -Dsonar.host.url=... -Dsonar.token=...`.
+
+### 2. Escaneo de imágenes — Trivy
+- Etapa `Trivy Image Scan` ([`scripts/ci/trivy-scan.sh`](../scripts/ci/trivy-scan.sh)) escanea las
+  imágenes recién construidas. Usa el binario `trivy` del host o, si no, la imagen oficial vía Docker.
+  Severidades `HIGH,CRITICAL`, `--ignore-unfixed`.
+- **`TRIVY_FAIL_ON_FINDINGS`**: master = `true` (gatea), dev/stage = `false` (solo avisa).
+- Complementa el `scan_on_push` que el módulo Terraform `ecr` ya activa.
+
+### 3. Versionado semántico
+- [`scripts/ci/semantic-version.sh`](../scripts/ci/semantic-version.sh) calcula la próxima versión
+  desde *Conventional Commits* desde el último tag `vX.Y.Z` (`feat!`/`BREAKING CHANGE`→major,
+  `feat:`→minor, resto→patch).
+- Master: con **`AUTO_VERSION=true`** (default) la usa para taggear imágenes (`prod-<ver>` +
+  `prod-latest`), release notes y, con **`PUSH_GIT_TAG=true`**, crea/empuja el tag `v<ver>`.
+
+### 4. Notificaciones
+- `post { success/unstable/failure }` en los 3 pipelines llama a `notifyBuild()`: intenta **Slack**
+  (`slackSend`, requiere el plugin Slack Notification) y **email** (si `NOTIFY_EMAIL` y hay SMTP).
+  Ambos van en try/catch → nunca rompen el build.
+
+### 5. Aprobación manual a prod
+- Master: etapa `Approval (prod)` con `input` (timeout 60 min, registra al aprobador) antes de
+  desplegar. Desactivable con **`REQUIRE_APPROVAL=false`** para corridas automáticas.
+
+### 6. Registry configurable (Docker Hub / ECR)
+- Master: parámetro **`REGISTRY_TYPE`** = `dockerhub` (default) | `ecr`.
+  - `dockerhub`: usa `IMAGE_NAMESPACE` + credencial `DOCKERHUB_CREDENTIALS_ID` (igual que antes).
+  - `ecr`: `aws ecr get-login-password` con `AWS_CREDENTIALS_ID` (access key/secret), `AWS_REGION`
+    y **`ECR_REGISTRY`** (`<account>.dkr.ecr.<region>.amazonaws.com`, del output Terraform
+    `terraform/shared` → `ecr_repository_urls`). Repos: `circleguard/<svc>`.
+  - ⚠️ Los manifiestos de `master` referencian Docker Hub (`demitard/*`). Para deploy desde ECR,
+    apunta las imágenes con `kubectl set image` / kustomize (pendiente, documentado).
+
+### Credenciales nuevas (Manage Jenkins → Credentials)
+| ID (default) | Tipo | Uso |
+|---|---|---|
+| `aws-credentials` | Username+password | Access key id + secret para login ECR (solo `REGISTRY_TYPE=ecr`) |
+| SonarQube server + token | config del plugin SonarQube Scanner | Análisis estático (lo gestiona `withSonarQubeEnv`) |
+| Slack workspace | config del plugin Slack Notification | `slackSend` en notificaciones |
 
 ---
 

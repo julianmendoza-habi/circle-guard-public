@@ -4,6 +4,11 @@
 
 CircleGuard is a state-of-the-art university contact tracing and fencing system designed to identify interconnected contact groups ("Circles") and apply rapid health fences while preserving individual anonymity.
 
+> 📚 **Proyecto Final IngeSoft V:** la documentación de entrega (metodología ágil, IaC, CI/CD,
+> patrones, pruebas, observabilidad, change management, seguridad) y el runbook de demo están
+> indexados en **[`docs/README.md`](docs/README.md)**. Para desplegar y demostrar localmente, ver
+> [`docs/DEMO_RUNBOOK.md`](docs/DEMO_RUNBOOK.md).
+
 ---
 
 ## 🌟 Vision & Mission
