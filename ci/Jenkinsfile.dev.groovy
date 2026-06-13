@@ -33,6 +33,14 @@ pipeline {
             description: 'Name of the SonarQube server (Manage Jenkins → System).')
         booleanParam(name: 'TRIVY_FAIL_ON_FINDINGS', defaultValue: false,
             description: 'Fail the build on HIGH/CRITICAL image vulnerabilities (dev defaults to warn-only).')
+        booleanParam(name: 'ENFORCE_COVERAGE', defaultValue: false,
+            description: 'Fail the build if aggregated line coverage is below COVERAGE_MIN.')
+        string(name: 'COVERAGE_MIN', defaultValue: '0.30',
+            description: 'Minimum aggregated LINE coverage ratio (0.0–1.0) when ENFORCE_COVERAGE is on.')
+        booleanParam(name: 'RUN_ZAP', defaultValue: false,
+            description: 'Run an OWASP ZAP baseline (passive) DAST scan against the deployed gateway.')
+        booleanParam(name: 'ZAP_FAIL_ON_FINDINGS', defaultValue: false,
+            description: 'Fail the build on ZAP FAIL-tagged alerts (dev defaults to warn-only).')
         string(name: 'NOTIFY_EMAIL', defaultValue: '', description: 'Recipients for notifications (optional).')
     }
     environment {
@@ -44,16 +52,28 @@ pipeline {
         stage('Checkout') {
             steps { checkout scm }
         }
-        stage('Gradle Unit Tests') {
+        stage('Gradle Unit Tests + Coverage') {
             steps {
                 sh '''
                     set -eu
-                    ./gradlew test --parallel --build-cache
+                    # Unit tests + aggregated JaCoCo coverage report (build/reports/jacoco/aggregate).
+                    ./gradlew test jacocoAggregatedReport --parallel --build-cache
                 '''
+                script {
+                    if (params.ENFORCE_COVERAGE) {
+                        withEnv(["COVERAGE_MIN=${params.COVERAGE_MIN}"]) {
+                            sh '''
+                                set -eu
+                                ./gradlew jacocoCoverageVerification -PcoverageMin="${COVERAGE_MIN}" --build-cache
+                            '''
+                        }
+                    }
+                }
             }
             post {
                 always {
                     junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml,**/build/test-results/integrationTest/*.xml'
+                    archiveArtifacts artifacts: 'build/reports/jacoco/aggregate/**', allowEmptyArchive: true
                 }
             }
         }
@@ -165,6 +185,24 @@ pipeline {
                         kubectl rollout status "deployment/${d}" -n circleguard-dev --timeout="${TIMEOUT}"
                     done
                 '''
+            }
+        }
+        stage('OWASP ZAP DAST (dev)') {
+            when { expression { params.RUN_ZAP } }
+            steps {
+                withEnv(["ZAP_FAIL_ON_FINDINGS=${params.ZAP_FAIL_ON_FINDINGS ? '1' : '0'}"]) {
+                    sh '''
+                        set -eu
+                        chmod +x scripts/ci/zap-baseline.sh scripts/ci/run-zap-with-kube-port-forward.sh
+                        # Port-forwards the deployed gateway to 127.0.0.1 and runs a passive baseline scan.
+                        scripts/ci/run-zap-with-kube-port-forward.sh circleguard-dev
+                    '''
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'build/reports/zap/**', allowEmptyArchive: true
+                }
             }
         }
     }

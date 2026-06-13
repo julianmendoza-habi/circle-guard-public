@@ -32,6 +32,10 @@ public class SecurityConfig {
             }))
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
+                // Actuator must be reachable unauthenticated by the kubelet probes
+                // (/actuator/health/{liveness,readiness}) and Prometheus (/actuator/prometheus);
+                // otherwise the liveness probe gets 401 and Kubernetes crash-loops the pod.
+                .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/api/v1/identities/visitor", "/api/v1/identities/map").permitAll()
                 .anyRequest().authenticated()
             )

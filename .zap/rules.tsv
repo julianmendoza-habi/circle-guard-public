@@ -1,0 +1,18 @@
+# OWASP ZAP baseline rule tuning for CircleGuard.
+# Columns (TAB-separated):  <ruleId>	<IGNORE|WARN|FAIL>	<comment>
+# Unlisted rules keep their default (WARN). The scan runs with -I, so WARNs are reported in the
+# HTML/JSON report but never fail the build; only FAIL-tagged rules fail it (and only when
+# ZAP_FAIL_ON_FINDINGS=1). Promote a rule to FAIL once the corresponding hardening is in place.
+#
+# --- Low-signal / acceptable-in-dev: silence to keep the report actionable ---
+10096	IGNORE	Timestamp Disclosure - noisy on JWT/JSON payloads
+10027	IGNORE	Information Disclosure - Suspicious Comments (low signal)
+10037	IGNORE	Server leaks version via "Server" header - acceptable in dev
+#
+# --- Security headers the gateway should eventually set (kept as WARN until hardened) ---
+10020	WARN	Missing Anti-clickjacking Header (X-Frame-Options)
+10021	WARN	X-Content-Type-Options Header Missing
+10038	WARN	Content Security Policy (CSP) Header Not Set
+10063	WARN	Permissions Policy Header Not Set
+10015	WARN	Re-examine Cache-control Directives
+90004	WARN	Insufficient Site Isolation Against Spectre Vulnerability

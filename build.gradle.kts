@@ -1,3 +1,6 @@
+import org.gradle.testing.jacoco.tasks.JacocoReport
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
+
 plugins {
     id("org.springframework.boot") version "3.2.4" apply false
     id("io.spring.dependency-management") version "1.1.4" apply false
@@ -6,6 +9,9 @@ plugins {
     kotlin("plugin.jpa") version "1.9.24" apply false
     // Static analysis: aggregates the whole multi-project for SonarQube (CI `sonar` task).
     id("org.sonarqube") version "5.1.0.4882"
+    // Applied to the root so the aggregate JacocoReport/JacocoCoverageVerification tasks below get a
+    // configured jacocoClasspath (the per-module jacoco plugin only configures its own project).
+    jacoco
 }
 
 allprojects {
@@ -101,6 +107,84 @@ configure(subprojects.filter { it.name != "e2e-tests" }) {
         kotlinOptions {
             freeCompilerArgs = listOf("-Xjsr305=strict")
             jvmTarget = "21"
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Aggregated code coverage across all microservice modules.
+// Each module already emits JaCoCo XML (consumed by SonarQube). This root task merges every
+// module's execution data into ONE human-readable XML + HTML report, and a companion gate
+// verifies a minimum line coverage. Run via the Docker helper on this Windows host (native
+// gradlew is loopback-blocked — see scripts/verify-local-docker.ps1 / HANDOFF.md §4):
+//   ./scripts/verify-local-docker.ps1 test jacocoAggregatedReport jacocoCoverageVerification
+// Cross-project sourceSet/exec lookups are wrapped in provider {} so they resolve at execution
+// time (after every subproject has been configured), not during root-script evaluation.
+// ---------------------------------------------------------------------------------------------
+val coveredProjects = subprojects.filter { it.name != "e2e-tests" }
+
+// Class-file noise that isn't meaningfully unit-tested; excluded so the % reflects real logic.
+val coverageClassExcludes = listOf(
+    "**/*Application.class", "**/config/**", "**/dto/**", "**/model/**", "**/entity/**",
+)
+
+val jacocoAggregatedReport = tasks.register<JacocoReport>("jacocoAggregatedReport") {
+    group = "verification"
+    description = "Aggregates JaCoCo coverage from all microservice modules into one XML + HTML report."
+    dependsOn(coveredProjects.map { "${it.path}:test" })
+
+    executionData.setFrom(provider {
+        files(coveredProjects.map { it.layout.buildDirectory.file("jacoco/test.exec") })
+            .filter { it.exists() }
+    })
+    sourceDirectories.setFrom(provider {
+        files(coveredProjects.mapNotNull {
+            it.extensions.findByType(SourceSetContainer::class.java)?.findByName("main")?.allSource?.srcDirs
+        })
+    })
+    classDirectories.setFrom(provider {
+        files(coveredProjects.mapNotNull {
+            it.extensions.findByType(SourceSetContainer::class.java)?.findByName("main")?.output
+        }).asFileTree.matching { exclude(coverageClassExcludes) }
+    })
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/aggregate/jacocoAggregatedReport.xml"))
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/aggregate/html"))
+    }
+}
+
+// Coverage gate. Threshold is modest by default (raise as the suite grows) and overridable:
+//   ./scripts/verify-local-docker.ps1 jacocoCoverageVerification -PcoverageMin=0.40
+val coverageMin = (findProperty("coverageMin") as String? ?: "0.30").toBigDecimal()
+tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
+    group = "verification"
+    description = "Fails the build if aggregated LINE coverage is below -PcoverageMin (default 0.30)."
+    dependsOn(jacocoAggregatedReport)
+    executionData.setFrom(provider {
+        files(coveredProjects.map { it.layout.buildDirectory.file("jacoco/test.exec") })
+            .filter { it.exists() }
+    })
+    sourceDirectories.setFrom(provider {
+        files(coveredProjects.mapNotNull {
+            it.extensions.findByType(SourceSetContainer::class.java)?.findByName("main")?.allSource?.srcDirs
+        })
+    })
+    classDirectories.setFrom(provider {
+        files(coveredProjects.mapNotNull {
+            it.extensions.findByType(SourceSetContainer::class.java)?.findByName("main")?.output
+        }).asFileTree.matching { exclude(coverageClassExcludes) }
+    })
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = coverageMin
+            }
         }
     }
 }

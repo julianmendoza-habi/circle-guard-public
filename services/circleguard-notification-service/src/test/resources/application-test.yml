@@ -1,0 +1,12 @@
+# Test-profile overrides (active via @ActiveProfiles("test")).
+#
+# The Actuator mail health contributor (added with the observability iteration) fails to
+# instantiate when JavaMailSender is replaced by @MockBean — Spring Boot's
+# MailHealthContributorAutoConfiguration receives an empty sender map and throws
+# "Beans must not be empty", which breaks @SpringBootTest context loading
+# (NotificationRetryTest, ExposureNotificationListenerTest). Mail health is irrelevant to these
+# tests, so disable just this indicator here. Production keeps the real mail health check.
+management:
+  health:
+    mail:
+      enabled: false
